@@ -48,6 +48,17 @@ NovaBuild — Context File
   использовать SPA-подход избыточно для демки. Старые app.js/style.css удалены, их логика
   разнесена по /js и /css выше.
 
+Известный баг и фикс: Apache/OSPanel не прокидывает Authorization
+
+  Симптом: после логина дашборд на секунду отрисовывался и тут же кидало обратно на login.
+  Причина: Apache под OSPanel по умолчанию не передаёт заголовок Authorization в $_SERVER —
+  require_auth() видел пустую строку и всегда отдавал 401, /me.php падал сразу после логина.
+  Подтверждено curl'ом напрямую к /api/me.php.
+  Фикс (оба слоя, на случай разных конфигураций Apache у разных разработчиков/хостингов):
+    1) includes/auth_middleware.php → get_authorization_header() пробует HTTP_AUTHORIZATION,
+       REDIRECT_HTTP_AUTHORIZATION, getallheaders(), apache_request_headers() по очереди.
+    2) project/api/.htaccess → RewriteRule прокидывает %{HTTP:Authorization} в HTTP_AUTHORIZATION.
+
 База данных — 5 таблиц
 
 sqlusers                  — id, email, password_hash, role ENUM(client|freelancer|admin), status, created_at

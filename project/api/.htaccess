@@ -1,0 +1,7 @@
+# Apache strips the Authorization header from PHP's $_SERVER by default.
+# Forward it explicitly so require_auth() can read Bearer tokens.
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{HTTP:Authorization} ^(.*)
+  RewriteRule .* - [E=HTTP_AUTHORIZATION:%1]
+</IfModule>
