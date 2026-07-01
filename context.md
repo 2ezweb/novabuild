@@ -35,11 +35,14 @@ NovaBuild — Context File
     /pages
       login.html         — форма входа
       register.html      — форма регистрации с выбором роли
+      verify.html         — ввод 6-значного кода подтверждения email после регистрации/при логине
       cabinet.html        — личный кабинет (общий для обеих ролей, поля разные)
       dashboard.html       — рабочий дашборд (офферы клиента / лента фрилансера)
     /js
-      common.js           — apiFetch/apiPost, esc/val, showError/hideError, requireAuth() (guard), logout(), setVerificationBadge()
-      auth.js             — doLogin(), doRegister(), selectRole()
+      common.js           — apiFetch/apiPost (кидают Error с полными полями ответа, не только .message),
+                            esc/val, showError/hideError, requireAuth() (guard), logout(), setVerificationBadge()
+      auth.js             — doLogin(), doRegister(), selectRole() — при pending_verification редиректят на verify.html
+      verify.js            — doVerify(), doResend() — работают с localStorage.pending_email
       cabinet.js           — загрузка/сохранение профиля
       dashboard.js         — офферы клиента, лента фрилансера, ставки
     /css
@@ -78,9 +81,29 @@ NovaBuild — Context File
   Решение (уточнили с пользователем): никаких decorative placeholder-виджетов (Connects/Consultations
   и т.п. из Upwork) — только то, что реально работает. Верхний навбар — без доп. ссылок, только "Дашборд".
 
+Email-верификация при регистрации (код на почту)
+
+  users получил 3 новых поля: email_verified_at DATETIME NULL, verification_code CHAR(6) NULL,
+  verification_code_expires_at DATETIME NULL (код живёт 10 минут).
+  Регистрация (auth.php action=register) больше НЕ выдаёт токен сразу — генерирует 6-значный код
+  (random_int(100000,999999)), пишет его в users, шлёт письмо через send_verification_email() (PHP mail())
+  и отвечает {pending_verification:true, email}. Фронтенд (auth.js doRegister) кладёт email в
+  localStorage.pending_email и редиректит на pages/verify.html.
+  Логин (action=login) блокируется, если email_verified_at IS NULL → 403 {pending_verification:true, email}.
+  auth.js doLogin() это ловит и точно так же редиректит на verify.html вместо показа ошибки.
+  Новые action'ы в auth.php: verify_email (email+code → проверка hash_equals + срок годности → ставит
+  email_verified_at=NOW(), чистит код, выдаёт JWT; если уже верифицирован — просто перевыдаёт JWT,
+  идемпотентно) и resend_code (email → перегенерирует код, шлёт письмо заново; 400 если уже подтверждён).
+  ВАЖНО про mail(): без Composer/библиотек — используется встроенная функция PHP `mail()`.
+  На этой машине (OSPanel) php.ini → sendmail_path указывает на modules/sendmail/sendmail.exe -local —
+  это локальный "перехватчик", который НЕ отправляет письма в интернet, а сохраняет каждое как .txt
+  в userdata/temp/email/. Для демо это удобно (код виден в файле), но в проде sendmail_path/SMTP
+  нужно будет настроить на реальный почтовый релей (или переходить на PHPMailer/SMTP-библиотеку).
+
 База данных — 5 таблиц
 
-sqlusers                  — id, email, password_hash, role ENUM(client|freelancer|admin), status, created_at
+sqlusers                  — id, email, password_hash, role ENUM(client|freelancer|admin), status,
+                         email_verified_at, verification_code, verification_code_expires_at, created_at
 freelancer_profiles    — id, user_id FK, full_name, phone, specialization, about,
                          verification_status ENUM(pending|verified|rejected), doc_path, verified_at
 client_profiles        — id, user_id FK, company_name, contact_name, phone
@@ -95,8 +118,9 @@ bids                   — id, offer_id FK, freelancer_id FK→freelancer_profil
 Бэкенд
 
 
-Регистрация: создаёт запись в users + пустой профиль в freelancer_profiles или client_profiles
-Логин: проверка password_verify(), возвращает JWT
+Регистрация: создаёт запись в users + пустой профиль в freelancer_profiles или client_profiles,
+  требует подтверждения email кодом (см. раздел "Email-верификация" ниже) прежде чем выдать JWT
+Логин: проверка password_verify(), блокирует неподтверждённые email, возвращает JWT
 JWT без библиотек: base64url + HMAC-SHA256, TTL 7 дней
 require_auth() — middleware, читает Authorization: Bearer <token>
 offers.php: клиент видит свои офферы + счётчик заявок; фрилансер видит все открытые

@@ -12,6 +12,11 @@ async function doLogin() {
     localStorage.setItem('token', res.token);
     location.href = 'dashboard.html';
   } catch (e) {
+    if (e.pending_verification) {
+      localStorage.setItem('pending_email', e.email);
+      location.href = 'verify.html';
+      return;
+    }
     showError('login-error', e.message);
   }
 }
@@ -23,9 +28,9 @@ async function doRegister() {
   hideError('reg-error');
   if (!role) return showError('reg-error', 'Выберите роль');
   try {
-    const res = await apiPost('/auth.php', { action: 'register', email, password, role });
-    localStorage.setItem('token', res.token);
-    location.href = 'dashboard.html';
+    await apiPost('/auth.php', { action: 'register', email, password, role });
+    localStorage.setItem('pending_email', email);
+    location.href = 'verify.html';
   } catch (e) {
     showError('reg-error', e.message);
   }

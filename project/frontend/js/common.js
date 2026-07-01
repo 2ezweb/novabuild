@@ -30,12 +30,16 @@ function hideError(id) {
 }
 
 // ─── API HELPERS ──────────────────────────────────────────────────────────────
+function apiError(data) {
+  return Object.assign(new Error(data.error || 'Server error'), data);
+}
+
 async function apiFetch(path) {
   const res = await fetch(API + path, {
     headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Server error');
+  if (!res.ok) throw apiError(data);
   return data;
 }
 
@@ -49,7 +53,7 @@ async function apiPost(path, body) {
     body: JSON.stringify(body)
   });
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Server error');
+  if (!res.ok) throw apiError(data);
   return data;
 }
 
