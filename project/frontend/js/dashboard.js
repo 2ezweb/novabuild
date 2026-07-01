@@ -41,7 +41,7 @@ function offerCardClient(o) {
           <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
           <p class="text-muted small mb-2">${esc(o.description || '')}</p>
           <span class="badge bg-secondary me-1">${statusLabel(o.status)}</span>
-          ${o.budget ? `<span class="badge bg-light text-dark border">₽ ${Number(o.budget).toLocaleString('ru')}</span>` : ''}
+          ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
           ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
         </div>
         <div class="text-end ms-3">
@@ -101,7 +101,7 @@ function offerCardFreelancer(o, alreadyBid) {
         <div>
           <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
           <p class="text-muted small mb-2">${esc(o.description || '')}</p>
-          ${o.budget   ? `<span class="badge bg-light text-dark border me-1">₽ ${Number(o.budget).toLocaleString('ru')}</span>` : ''}
+          ${o.budget   ? `<span class="badge bg-light text-dark border me-1">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
           ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
         </div>
         <div class="ms-3 flex-shrink-0">
