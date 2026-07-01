@@ -1,0 +1,12 @@
+/* Role selector cards (register page) */
+.role-card {
+  cursor: pointer;
+  transition: border-color .15s, background .15s;
+  user-select: none;
+}
+.role-card:hover       { border-color: #0d6efd !important; background: #f0f5ff; }
+.role-card.role-selected {
+  border-color: #0d6efd !important;
+  background: #e7f0ff;
+  box-shadow: 0 0 0 2px #0d6efd44;
+}
