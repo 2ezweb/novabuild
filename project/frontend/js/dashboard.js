@@ -2,6 +2,7 @@ let currentUser = null;
 
 window.addEventListener('DOMContentLoaded', async () => {
   currentUser = await requireAuth();
+  renderSidebarProfile();
   if (currentUser.role === 'client') {
     document.getElementById('client-content').style.display = '';
     loadClientDashboard();
@@ -11,6 +12,28 @@ window.addEventListener('DOMContentLoaded', async () => {
     loadFreelancerDashboard();
   }
 });
+
+// ─── SIDEBAR ──────────────────────────────────────────────────────────────────
+function renderSidebarProfile() {
+  const isFreelancer = currentUser.role === 'freelancer';
+  const name = isFreelancer
+    ? (currentUser.full_name || currentUser.email)
+    : (currentUser.company_name || currentUser.contact_name || currentUser.email);
+  const sub = isFreelancer
+    ? (currentUser.specialization || 'Специализация не указана')
+    : (currentUser.contact_name || 'Контакт не указан');
+
+  document.querySelectorAll('.sidebar-avatar').forEach(el => el.textContent = initials(name));
+  document.querySelectorAll('.sidebar-name').forEach(el => el.textContent = name);
+  document.querySelectorAll('.sidebar-sub').forEach(el => el.textContent = sub);
+
+  if (isFreelancer) {
+    const fields = [currentUser.full_name, currentUser.phone, currentUser.specialization, currentUser.about];
+    const pct = Math.round(fields.filter(Boolean).length / fields.length * 100);
+    document.getElementById('profile-completeness-pct').textContent = pct + '%';
+    document.getElementById('profile-completeness-bar').style.width = pct + '%';
+  }
+}
 
 // ─── CLIENT ───────────────────────────────────────────────────────────────────
 async function loadClientDashboard() {
@@ -36,18 +59,16 @@ async function loadClientDashboard() {
 function offerCardClient(o) {
   return `
     <div class="card offer-card mb-3 p-3">
-      <div class="d-flex justify-content-between align-items-start">
-        <div>
-          <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
-          <p class="text-muted small mb-2">${esc(o.description || '')}</p>
-          <span class="badge bg-secondary me-1">${statusLabel(o.status)}</span>
-          ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
-          ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
-        </div>
-        <div class="text-end ms-3">
-          <div class="fw-bold text-primary fs-5">${o.bid_count || 0}</div>
-          <div class="text-muted small">заявок</div>
-        </div>
+      <div class="d-flex justify-content-between text-muted small mb-2">
+        <span>Опубликовано ${timeAgo(o.created_at)}</span>
+        <span>Заявок: ${o.bid_count || 0}</span>
+      </div>
+      <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
+      <p class="text-muted small mb-2">${esc(o.description || '')}</p>
+      <div class="d-flex gap-2 flex-wrap">
+        <span class="badge bg-secondary">${statusLabel(o.status)}</span>
+        ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
+        ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
       </div>
     </div>`;
 }
@@ -97,19 +118,21 @@ async function loadFreelancerDashboard() {
 function offerCardFreelancer(o, alreadyBid) {
   return `
     <div class="card offer-card mb-3 p-3">
-      <div class="d-flex justify-content-between align-items-start">
-        <div>
-          <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
-          <p class="text-muted small mb-2">${esc(o.description || '')}</p>
-          ${o.budget   ? `<span class="badge bg-light text-dark border me-1">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
+      <div class="d-flex justify-content-between text-muted small mb-2">
+        <span>Опубликовано ${timeAgo(o.created_at)}</span>
+        <span>Заявок: ${o.bid_count || 0}</span>
+      </div>
+      <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
+      <p class="text-muted small mb-2">${esc(o.description || '')}</p>
+      <div class="d-flex justify-content-between align-items-center">
+        <div class="d-flex gap-2 flex-wrap">
+          ${o.budget   ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
           ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
         </div>
-        <div class="ms-3 flex-shrink-0">
-          ${alreadyBid
-            ? `<span class="badge bg-success">✓ Заявка подана</span>`
-            : `<button class="btn btn-sm btn-outline-primary" onclick="placeBid(${o.id}, this)">Подать заявку</button>`
-          }
-        </div>
+        ${alreadyBid
+          ? `<span class="badge bg-success">✓ Заявка подана</span>`
+          : `<button class="btn btn-sm btn-outline-primary" onclick="placeBid(${o.id}, this)">Подать заявку</button>`
+        }
       </div>
     </div>`;
 }

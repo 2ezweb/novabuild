@@ -1,3 +1,11 @@
 body { background: #f8f9fa; }
 
 .navbar-brand { color: #fff !important; }
+
+.avatar-btn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-weight: 600;
+  line-height: 1;
+}

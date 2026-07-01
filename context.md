@@ -61,6 +61,23 @@ NovaBuild — Context File
        REDIRECT_HTTP_AUTHORIZATION, getallheaders(), apache_request_headers() по очереди.
     2) project/api/.htaccess → RewriteRule прокидывает %{HTTP:Authorization} в HTTP_AUTHORIZATION.
 
+Редизайн dashboard.html/cabinet.html в стиле Upwork (референс от пользователя)
+
+  Навбар (общий для dashboard.html и cabinet.html): бренд + ссылка "Дашборд" + аватарка-кружок
+  (инициал имени/email) справа — по клику Bootstrap dropdown с email, ссылкой "Профиль" и "Выйти".
+  common.js: requireAuth() дополнительно проставляет инициалы в #nav-avatar.
+  dashboard.html — двухколоночный layout (Bootstrap row): слева/по центру (col-lg-8) лента офферов,
+  справа (col-lg-4) сайдбар — карточка профиля (аватар, имя, специализация/компания), кнопка
+  "Редактировать профиль" → cabinet.html, для клиента кнопка "+ Разместить оффер", для фрилансера —
+  бейдж верификации + прогресс-бар "Профиль заполнен" (реальный расчёт: доля заполненных полей
+  full_name/phone/specialization/about), плюс отдельная карточка со статами.
+  На мобильных сайдбар/карточка профиля показывается выше ленты (order-1/order-2 + order-lg-1/2).
+  Карточки офферов (offerCardClient/offerCardFreelancer в dashboard.js) переверстаны под
+  upwork-стиль: строка "Опубликовано X назад · Заявок: N" сверху (timeAgo() в common.js — простое
+  относительное время без библиотек), затем заголовок/описание, затем бейджи бюджета/срока/статуса.
+  Решение (уточнили с пользователем): никаких decorative placeholder-виджетов (Connects/Consultations
+  и т.п. из Upwork) — только то, что реально работает. Верхний навбар — без доп. ссылок, только "Дашборд".
+
 База данных — 5 таблиц
 
 sqlusers                  — id, email, password_hash, role ENUM(client|freelancer|admin), status, created_at

@@ -6,6 +6,20 @@ const API = '../../api';
 function val(id)  { return document.getElementById(id)?.value?.trim() ?? ''; }
 function esc(s)   { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
+function initials(name) { return String(name || '?').trim().charAt(0).toUpperCase(); }
+
+function timeAgo(mysqlDatetime) {
+  const diffMin = Math.floor((Date.now() - new Date(mysqlDatetime.replace(' ', 'T')).getTime()) / 60000);
+  if (diffMin < 1)   return 'только что';
+  if (diffMin < 60)  return `${diffMin} мин назад`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24)   return `${diffHr} ч назад`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return 'вчера';
+  if (diffDay < 30)  return `${diffDay} дн назад`;
+  return `${Math.floor(diffDay / 30)} мес назад`;
+}
+
 function showError(id, msg) {
   const el = document.getElementById(id);
   el.textContent = msg;
@@ -51,6 +65,8 @@ async function requireAuth() {
     const me = await apiFetch('/me.php');
     const label = document.getElementById('nav-email');
     if (label) label.textContent = me.email;
+    const avatar = document.getElementById('nav-avatar');
+    if (avatar) avatar.textContent = initials(me.full_name || me.company_name || me.email);
     return me;
   } catch {
     localStorage.removeItem('token');
