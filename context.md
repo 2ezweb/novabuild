@@ -80,6 +80,23 @@ NovaBuild — Context File
   относительное время без библиотек), затем заголовок/описание, затем бейджи бюджета/срока/статуса.
   Решение (уточнили с пользователем): никаких decorative placeholder-виджетов (Connects/Consultations
   и т.п. из Upwork) — только то, что реально работает. Верхний навбар — без доп. ссылок, только "Дашборд".
+  Навбар: бренд + "Дашборд" сгруппированы слева у лого (flex-контейнер), аватарка-дропдаун — справа
+  (изначально "Дашборд" был рядом с аватаркой — перенесли по правкам пользователя).
+
+Редактирование и закрытие оффера владельцем
+
+  api/offers.php получил PUT (Access-Control-Allow-Methods обновлён). Только role=client, и только
+  если offers.client_id (через client_profiles.user_id) принадлежит текущему JWT-юзеру — иначе 404
+  (не палим существование чужого оффера). Тело PUT — частичное: title/description/budget/deadline/status,
+  обновляются только переданные поля (array_key_exists, не isset — чтобы можно было явно затирать
+  description пустой строкой). status валидируется по ENUM (open|in_progress|closed).
+  Фронтенд: модалка #offerModal теперь одна на создание И редактирование — скрытый #offer-id,
+  заголовок/текст кнопки переключаются в openCreateOffer()/editOffer(id) (dashboard.js). editOffer()
+  берёт данные не из DOM, а из module-level массива clientOffers (заполняется в loadClientDashboard()) —
+  так безопаснее, чем сериализовать description с кавычками/переносами строк в HTML-атрибут onclick.
+  closeOffer(id) — confirm() → PUT {id, status:'closed'}. Кнопки "Редактировать"/"Закрыть" в
+  offerCardClient() скрываются, если offer.status === 'closed' (уже закрытый оффер не трогаем).
+  common.js получил apiPut() (зеркало apiPost(), метод PUT).
 
 Email-верификация при регистрации (код на почту)
 

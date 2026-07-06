@@ -57,6 +57,20 @@ async function apiPost(path, body) {
   return data;
 }
 
+async function apiPut(path, body) {
+  const res = await fetch(API + path, {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:  'Bearer ' + localStorage.getItem('token')
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw apiError(data);
+  return data;
+}
+
 // ─── AUTH GUARD ───────────────────────────────────────────────────────────────
 // Call from protected pages (cabinet.html, dashboard.html) on load.
 // Resolves with the current user, or redirects to login.html and never resolves.

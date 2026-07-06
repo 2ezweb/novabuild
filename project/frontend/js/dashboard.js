@@ -36,9 +36,12 @@ function renderSidebarProfile() {
 }
 
 // ─── CLIENT ───────────────────────────────────────────────────────────────────
+let clientOffers = [];
+
 async function loadClientDashboard() {
   try {
     const offers = await apiFetch('/offers.php');
+    clientOffers = offers;
     document.getElementById('stat-offers').textContent = offers.length;
 
     const totalBids = offers.reduce((sum, o) => sum + (o.bid_count || 0), 0);
@@ -57,6 +60,7 @@ async function loadClientDashboard() {
 }
 
 function offerCardClient(o) {
+  const canManage = o.status !== 'closed';
   return `
     <div class="card offer-card mb-3 p-3">
       <div class="d-flex justify-content-between text-muted small mb-2">
@@ -65,15 +69,49 @@ function offerCardClient(o) {
       </div>
       <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
       <p class="text-muted small mb-2">${esc(o.description || '')}</p>
-      <div class="d-flex gap-2 flex-wrap">
-        <span class="badge bg-secondary">${statusLabel(o.status)}</span>
-        ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
-        ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
+      <div class="d-flex justify-content-between align-items-end flex-wrap gap-2">
+        <div class="d-flex gap-2 flex-wrap">
+          <span class="badge bg-secondary">${statusLabel(o.status)}</span>
+          ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
+          ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
+        </div>
+        ${canManage ? `
+          <div class="d-flex gap-2">
+            <button class="btn btn-sm btn-outline-secondary" onclick="editOffer(${o.id})">Редактировать</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="closeOffer(${o.id})">Закрыть</button>
+          </div>` : ''}
       </div>
     </div>`;
 }
 
+function openCreateOffer() {
+  document.getElementById('offer-id').value = '';
+  document.getElementById('offer-title').value = '';
+  document.getElementById('offer-desc').value = '';
+  document.getElementById('offer-budget').value = '';
+  document.getElementById('offer-deadline').value = '';
+  document.getElementById('offerModalLabel').textContent = 'Новый оффер';
+  document.getElementById('offer-submit-btn').textContent = 'Разместить';
+  hideError('offer-error');
+  new bootstrap.Modal(document.getElementById('offerModal')).show();
+}
+
+function editOffer(id) {
+  const o = clientOffers.find(x => x.id === id);
+  if (!o) return;
+  document.getElementById('offer-id').value = o.id;
+  document.getElementById('offer-title').value = o.title;
+  document.getElementById('offer-desc').value = o.description || '';
+  document.getElementById('offer-budget').value = o.budget || '';
+  document.getElementById('offer-deadline').value = o.deadline || '';
+  document.getElementById('offerModalLabel').textContent = 'Редактировать оффер';
+  document.getElementById('offer-submit-btn').textContent = 'Сохранить';
+  hideError('offer-error');
+  new bootstrap.Modal(document.getElementById('offerModal')).show();
+}
+
 async function submitOffer() {
+  const id          = val('offer-id');
   const title       = val('offer-title');
   const description = val('offer-desc');
   const budget      = val('offer-budget');
@@ -81,11 +119,25 @@ async function submitOffer() {
   hideError('offer-error');
   if (!title) return showError('offer-error', 'Укажите заголовок');
   try {
-    await apiPost('/offers.php', { title, description, budget, deadline });
+    if (id) {
+      await apiPut('/offers.php', { id: Number(id), title, description, budget, deadline });
+    } else {
+      await apiPost('/offers.php', { title, description, budget, deadline });
+    }
     bootstrap.Modal.getInstance(document.getElementById('offerModal')).hide();
     loadClientDashboard();
   } catch (e) {
     showError('offer-error', e.message);
+  }
+}
+
+async function closeOffer(id) {
+  if (!confirm('Закрыть этот оффер? Фрилансеры больше не смогут его увидеть или откликнуться.')) return;
+  try {
+    await apiPut('/offers.php', { id, status: 'closed' });
+    loadClientDashboard();
+  } catch (e) {
+    alert(e.message);
   }
 }
 
