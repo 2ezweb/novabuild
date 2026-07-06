@@ -21,32 +21,48 @@ NovaBuild — Context File
 
 /project
   /api
-    auth.php            — регистрация + логин (action: register | login)
+    auth.php            — регистрация + логин + email-верификация (action: register|login|verify_email|resend_code)
     me.php              — GET текущего юзера + профиль по токену
-    offers.php          — GET список офферов / POST создать оффер
+    offers.php          — GET список офферов / POST создать / PUT редактировать-закрыть (владелец)
     bids.php            — GET мои заявки / POST подать заявку
-    profile.php         — POST обновить профиль (поля зависят от роли)
+    profile.php         — POST обновить профиль (поля зависят от роли: client/freelancer/admin)
+    avatar.php          — POST multipart-загрузка аватара (любая роль), резайз через GD до 200×200
+    verification.php    — POST заявка на верификацию (client/freelancer), multipart-загрузка PDF/PNG/JPEG
+    notifications.php   — GET мои уведомления / POST mark_read|mark_all_read
+    admin.php           — admin-only: GET users|verification_requests|document, POST approve|reject
   /includes
     db.php              — подключение PDO к MySQL (get_db())
     jwt.php             — jwt_encode() / jwt_decode(), секрет в JWT_SECRET
-    auth_middleware.php — require_auth() → возвращает payload или 401
+    auth_middleware.php — require_auth() → payload или 401; require_admin() → payload или 403
+    image.php           — resize_square_image() — GD-хелпер: center-crop + resample до NxN, сохраняет JPEG
+    notifications.php   — create_notification(), notify_admins() — INSERT в таблицу notifications
+  /uploads
+    avatars/            — публично отдаётся веб-сервером напрямую (аватарки не приватные)
+    verification/       — .htaccess (Require all denied) — НЕ отдаётся напрямую, только через
+                          admin.php?action=document (стримится PHP после require_admin() + finfo)
+  /sql
+    schema.sql          — полный слепок структуры БД, см. ниже
   /frontend
     index.html          — редирект-заглушка: смотрит localStorage token → pages/dashboard.html или pages/login.html
     /pages
-      login.html         — форма входа
+      login.html         — форма входа (поле теперь type=text — админ логинится не email'ом, а логином "vito")
       register.html      — форма регистрации с выбором роли
       verify.html         — ввод 6-значного кода подтверждения email после регистрации/при логине
-      cabinet.html        — личный кабинет (общий для обеих ролей, поля разные)
-      dashboard.html       — рабочий дашборд (офферы клиента / лента фрилансера)
+      cabinet.html        — личный кабинет (client/freelancer/admin — поля разные), аватар, верификация
+      dashboard.html       — рабочий дашборд (офферы клиента / лента фрилансера); редиректит admin → admin.html
+      admin.html           — админка: список юзеров + заявки на верификацию (навигация в сайдбаре справа)
     /js
-      common.js           — apiFetch/apiPost (кидают Error с полными полями ответа, не только .message),
-                            esc/val, showError/hideError, requireAuth() (guard), logout(), setVerificationBadge()
-      auth.js             — doLogin(), doRegister(), selectRole() — при pending_verification редиректят на verify.html
+      common.js           — apiFetch/apiPost/apiPut (кидают Error с полными полями ответа, не только .message),
+                            esc/val/initials/displayName/avatarUrl/renderAvatarEl/roleBadgeHtml/timeAgo,
+                            showError/hideError, requireAuth() (guard + navbar/bell init), logout(),
+                            setVerificationBadge(), initNotificationBell()/loadNotifications()/markNotificationRead()
+      auth.js             — doLogin() (редирект admin→admin.html по res.role), doRegister(), selectRole()
       verify.js            — doVerify(), doResend() — работают с localStorage.pending_email
-      cabinet.js           — загрузка/сохранение профиля
-      dashboard.js         — офферы клиента, лента фрилансера, ставки
+      cabinet.js           — профиль (все 3 роли), загрузка аватара, подача заявки на верификацию
+      dashboard.js         — офферы клиента, лента фрилансера (+ бейдж/компания клиента), ставки
+      admin.js             — список юзеров, заявки на верификацию, approve/reject, просмотр документа
     /css
-      common.css, auth.css, cabinet.css, dashboard.css — по одному файлу на страницу + общий
+      common.css, auth.css, cabinet.css, dashboard.css, admin.css — по файлу на страницу + общий
 
   ПРИМЕЧАНИЕ: раньше фронтенд был SPA на #hash-роутинге (index.html + app.js + style.css).
   Переведено на классическую многостраничную схему (реальная навигация между .html), т.к. без React
@@ -129,18 +145,93 @@ Email-верификация при регистрации (код на почт
   разворачивается за один шаг. Обновляется вручную перед каждым коммитом, где менялась схема (а не
   автоматически хуком) — эта договорённость с пользователем действует на все следующие сессии.
 
-База данных — 5 таблиц
+Личные кабинеты, верификация, уведомления, админка (2026-07-06)
 
-sqlusers                  — id, email, password_hash, role ENUM(client|freelancer|admin), status,
-                         email_verified_at, verification_code, verification_code_expires_at, created_at
-freelancer_profiles    — id, user_id FK, full_name, phone, specialization, about,
-                         verification_status ENUM(pending|verified|rejected), doc_path, verified_at
-client_profiles        — id, user_id FK, company_name, contact_name, phone
+  Большой рефакторинг по запросу пользователя. Ключевое архитектурное решение: имя/фамилия/аватар/
+  верификация раньше жили порознь в freelancer_profiles и client_profiles (и админ вообще не имел
+  профиля) — перенесены на users как общие для ВСЕХ ролей поля (first_name, last_name, avatar_path,
+  verification_status, verification_doc_path, verified_at). Профильные таблицы остались только для
+  того, что реально уникально под роль (freelancer: phone/website/specialization/about;
+  client: company_name/phone). Существующие full_name/contact_name у 3 реальных аккаунтов на момент
+  миграции разнесены по first_name/last_name наивным сплитом по первому пробелу (проверено вручную).
+
+  Видимость полей (правила из ТЗ пользователя):
+    - Фамилия клиента — видна только администратору.
+    - Фамилия фрилансера — другим показывается как "Имя Ф." (первая буква фамилии + точка),
+      администратору — полностью.
+    - Email — виден только администратору (пока что).
+    - Компания клиента — опциональна; если не указана, фрилансер видит клиента как "Частное лицо".
+    ВАЖНО: сейчас в приложении НЕТ ни одной страницы, где один юзер смотрит полный профиль другого
+    юзера (кроме админского списка юзеров, где всё показывается без масок по определению) — только
+    сам себе (me.php всегда отдаёт полные данные владельцу) и клиент/компания в ленте офферов
+    (offers.php: client_company_name / client_verification_status для фрилансера — единственное
+    реальное место, где чужие данные сейчас показываются). Поэтому маскировка фамилии фрилансера
+    ("Иван И.") пока НЕ реализована — применять её негде, это будет естественная часть будущей
+    "детальной страницы оффера / списка заявок" (freelancer-профиль, который увидит клиент).
+
+  Аватар: 200×200, загрузка через POST /api/avatar.php (multipart, поле "avatar"). Валидация через
+  finfo (реальный MIME, не расширение/Content-Type от клиента) — только image/jpeg и image/png,
+  до 5МБ. includes/image.php: resize_square_image() — center-crop до квадрата (по меньшей стороне),
+  imagecopyresampled() до 200×200, сохраняется как JPEG (это GD, встроенное расширение PHP, не
+  Composer-библиотека). Если аватара нет — на клиенте рисуется кружок с первой буквой имени на фоне
+  (renderAvatarEl() в common.js). Старый файл аватара удаляется при загрузке нового.
+
+  Верификация (галочка "Verificated"): теперь есть у client И freelancer (не только у фрилансера,
+  как было раньше) — verification_status ENUM('none','pending','verified','rejected') на users.
+  Кнопка "Подать заявку на верификацию" (cabinet.html) грузит паспорт PDF/PNG/JPEG через
+  POST /api/verification.php (multipart, поле "document", до 10МБ, MIME-проверка через finfo).
+  Файл сохраняется в /project/uploads/verification/ — эта папка закрыта от прямого веб-доступа
+  через .htaccess (Require all denied, проверено curl'ом — 403), т.к. паспортные сканы это PII и
+  им не место за угадываемым URL. Просмотр документа — только админом, через
+  GET /api/admin.php?action=document&user_id=N, который стримит файл после require_admin() +
+  finfo-проверки MIME. На фронте (admin.js viewDocument()) это тоже нетривиально: обычный <img src>
+  не понесёт наш Bearer-токен, поэтому картинка/PDF грузится через fetch() с заголовком Authorization,
+  оборачивается в blob → URL.createObjectURL() и уже так подставляется в <img>/<iframe> модалки.
+  При подаче заявки всем админам создаётся уведомление (notify_admins(), type=verification_submitted) —
+  это и есть "заявка улетает в консоль админа" из ТЗ: в терминологии этого приложения "консоль" —
+  это раздел "Заявки на верификацию" в admin.html + бейдж-счётчик количества + колокольчик уведомлений,
+  а не буквальный серверный терминал/лог.
+  Одобрение/отклонение — POST /api/admin.php {action: approve|reject, user_id}. approve → verified_at=NOW(),
+  уведомление "Ваш профиль верифицирован!". reject → verified_at=NULL, уведомление "Ваша заявка на
+  верификацию была отклонена." Повторная подача после отклонения разрешена (протестировано).
+
+  Уведомления: таблица notifications (user_id FK ON DELETE CASCADE, type, message, is_read, created_at).
+  Колокольчик в навбаре (общий для dashboard/cabinet/admin) — Bootstrap dropdown, красная точка если
+  есть непрочитанные, список подгружается по клику через GET /api/notifications.php (последние 20),
+  клик по уведомлению — POST action=mark_read. Никаких других триггеров уведомлений (например на
+  новую ставку) пока не заведено — только вокруг верификации, чтобы не тащить недоделанный функционал.
+
+  Админка: логин "vito" / пароль "qwerty12345" (роль admin, email_verified_at проставлен сразу —
+  сидировался напрямую в БД, не через публичную регистрацию, т.к. auth.php не разрешает role=admin
+  при регистрации). Поле логина на login.html теперь type="text", не type="email" — иначе браузер
+  блокирует отправку формы, т.к. "vito" не проходит HTML5-валидацию email-инпута.
+  admin.html — двухколоночный layout как у dashboard.html: слева список юзеров или заявок на
+  верификацию (переключение — admin.js showSection()), справа сайдбар с профилем админа (аватар,
+  имя + золотой бейдж "★ Админ" — roleBadgeHtml() в common.js) и навигацией "Все пользователи" /
+  "Заявки на верификацию" (с счётчиком pending) под профилем — как и просил пользователь.
+  Админ правит свои Имя/Логin/Аватар через cabinet.html (третья ветка полей, #profile-fields-admin) —
+  переиспользует общий профильный флоу, а не отдельную форму внутри admin.html.
+  require_admin() в auth_middleware.php — require_auth() + проверка role==='admin', иначе 403.
+
+  Известный тестовый артефакт данных: 3 "боевых" аккаунта пользователя из ручного тестирования
+  (vitotestinovich@gmail.com, ragul21412@gmail.com + пара офферов с нецензурными тестовыми
+  заголовками) сохранены как есть при миграции — не мои, трогать не стал.
+
+База данных — 6 таблиц
+
+sqlusers                  — id, email (он же логин админа), password_hash, role ENUM(client|freelancer|admin),
+                         first_name, last_name, avatar_path, status ENUM(active|banned),
+                         verification_status ENUM(none|pending|verified|rejected), verification_doc_path,
+                         verified_at, email_verified_at, verification_code, verification_code_expires_at,
+                         created_at, updated_at
+freelancer_profiles    — id, user_id FK, phone, website, specialization, about (до 3000 символов)
+client_profiles        — id, user_id FK, company_name (опционально), phone
 offers                 — id, client_id FK→client_profiles, title, description,
                          budget DECIMAL, deadline DATE, status ENUM(open|in_progress|closed), created_at
 bids                   — id, offer_id FK, freelancer_id FK→freelancer_profiles, cover_note,
                          status ENUM(pending|accepted|rejected), created_at
                          UNIQUE KEY (offer_id, freelancer_id)
+notifications          — id, user_id FK ON DELETE CASCADE, type, message, is_read, created_at
 
 Что реализовано (ТАСК 1 + ТАСК 2 + ТАСК 3)
 
@@ -154,7 +245,8 @@ JWT без библиотек: base64url + HMAC-SHA256, TTL 7 дней
 require_auth() — middleware, читает Authorization: Bearer <token>
 offers.php: клиент видит свои офферы + счётчик заявок; фрилансер видит все открытые
 bids.php: фрилансер подаёт заявку; дубли блокируются на уровне UNIQUE KEY в БД
-profile.php (ТАСК 3): POST обновляет freelancer_profiles или client_profiles в зависимости от роли из JWT
+profile.php: POST обновляет users (first_name/last_name/логин у админа) + профильную таблицу под роль
+avatar.php / verification.php / notifications.php / admin.php — см. раздел "Личные кабинеты..." выше
 Все ответы JSON, CORS-заголовки открыты (для демки)
 Все файлы api/*.php лежат в /project/api — исправлена ошибка расположения (offers.php и bids.php раньше лежали в /includes и были недоступны фронтенду)
 
@@ -176,9 +268,8 @@ pages/dashboard.html — рабочий дашборд: клиент видит 
 Что НЕ сделано (следующие таски)
 
 
- Загрузка документов на верификацию (фрилансер)
- Детальная страница оффера + список заявок на него
- Admin-панель: просмотр заявок на верификацию, смена статуса
+ Детальная страница оффера + список заявок на него (когда появится — заодно реализовать маскировку
+   фамилии фрилансера "Иван И." для чужих, см. раздел про личные кабинеты выше)
  Чат между заказчиком и фрилансером
  Платежи / эскроу
 

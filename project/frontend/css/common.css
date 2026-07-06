@@ -8,4 +8,26 @@ body { background: #f8f9fa; }
   padding: 0;
   font-weight: 600;
   line-height: 1;
+  background-size: cover;
+  background-position: center;
 }
+
+.badge-admin {
+  background: linear-gradient(135deg, #b8860b, #ffd700);
+  color: #3a2c00;
+}
+
+.notifications-dropdown {
+  width: 320px;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+.notification-item {
+  cursor: pointer;
+  border-bottom: 1px solid #eee;
+}
+.notification-item:hover { background: #f8f9fa; }
+.notification-item:last-child { border-bottom: none; }
+.notification-unread { background: #eef4ff; }
+

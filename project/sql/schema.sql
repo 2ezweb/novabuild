@@ -56,7 +56,6 @@ CREATE TABLE `client_profiles` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) NOT NULL,
   `company_name` varchar(200) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `contact_name` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `phone` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `user_id` (`user_id`),
@@ -74,16 +73,33 @@ DROP TABLE IF EXISTS `freelancer_profiles`;
 CREATE TABLE `freelancer_profiles` (
   `id` int(11) NOT NULL AUTO_INCREMENT,
   `user_id` int(11) NOT NULL,
-  `full_name` varchar(150) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `phone` varchar(30) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `website` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `specialization` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `about` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `verification_status` enum('pending','verified','rejected') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
-  `doc_path` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
-  `verified_at` timestamp NULL DEFAULT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `user_id` (`user_id`),
   CONSTRAINT `freelancer_profiles_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+/*!40101 SET character_set_client = @saved_cs_client */;
+
+--
+-- Table structure for table `notifications`
+--
+
+DROP TABLE IF EXISTS `notifications`;
+/*!40101 SET @saved_cs_client     = @@character_set_client */;
+/*!40101 SET character_set_client = utf8 */;
+CREATE TABLE `notifications` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `user_id` int(11) NOT NULL,
+  `type` varchar(50) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `message` varchar(500) COLLATE utf8mb4_unicode_ci NOT NULL,
+  `is_read` tinyint(1) NOT NULL DEFAULT 0,
+  `created_at` timestamp NULL DEFAULT current_timestamp(),
+  PRIMARY KEY (`id`),
+  KEY `user_id` (`user_id`),
+  CONSTRAINT `notifications_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 /*!40101 SET character_set_client = @saved_cs_client */;
 
@@ -121,7 +137,13 @@ CREATE TABLE `users` (
   `email` varchar(191) COLLATE utf8mb4_unicode_ci NOT NULL,
   `password_hash` varchar(255) COLLATE utf8mb4_unicode_ci NOT NULL,
   `role` enum('client','freelancer','admin') COLLATE utf8mb4_unicode_ci NOT NULL,
+  `first_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `last_name` varchar(100) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `avatar_path` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `status` enum('active','banned') COLLATE utf8mb4_unicode_ci DEFAULT 'active',
+  `verification_status` enum('none','pending','verified','rejected') COLLATE utf8mb4_unicode_ci NOT NULL DEFAULT 'none',
+  `verification_doc_path` varchar(500) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `verified_at` datetime DEFAULT NULL,
   `email_verified_at` datetime DEFAULT NULL,
   `verification_code` char(6) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `verification_code_expires_at` datetime DEFAULT NULL,
@@ -145,4 +167,4 @@ CREATE TABLE `users` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-07-01 14:03:09
+-- Dump completed on 2026-07-06 11:20:37

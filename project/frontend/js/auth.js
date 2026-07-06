@@ -10,7 +10,7 @@ async function doLogin() {
   try {
     const res = await apiPost('/auth.php', { action: 'login', email, password });
     localStorage.setItem('token', res.token);
-    location.href = 'dashboard.html';
+    location.href = res.role === 'admin' ? 'admin.html' : 'dashboard.html';
   } catch (e) {
     if (e.pending_verification) {
       localStorage.setItem('pending_email', e.email);

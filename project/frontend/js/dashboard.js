@@ -2,13 +2,16 @@ let currentUser = null;
 
 window.addEventListener('DOMContentLoaded', async () => {
   currentUser = await requireAuth();
+  if (currentUser.role === 'admin') {
+    location.href = 'admin.html';
+    return;
+  }
   renderSidebarProfile();
   if (currentUser.role === 'client') {
     document.getElementById('client-content').style.display = '';
     loadClientDashboard();
   } else {
     document.getElementById('freelancer-content').style.display = '';
-    setVerificationBadge(currentUser.verification_status);
     loadFreelancerDashboard();
   }
 });
@@ -16,19 +19,19 @@ window.addEventListener('DOMContentLoaded', async () => {
 // ─── SIDEBAR ──────────────────────────────────────────────────────────────────
 function renderSidebarProfile() {
   const isFreelancer = currentUser.role === 'freelancer';
-  const name = isFreelancer
-    ? (currentUser.full_name || currentUser.email)
-    : (currentUser.company_name || currentUser.contact_name || currentUser.email);
+  const name = displayName(currentUser);
   const sub = isFreelancer
     ? (currentUser.specialization || 'Специализация не указана')
-    : (currentUser.contact_name || 'Контакт не указан');
+    : (currentUser.company_name ? currentUser.company_name : 'Частное лицо');
 
-  document.querySelectorAll('.sidebar-avatar').forEach(el => el.textContent = initials(name));
-  document.querySelectorAll('.sidebar-name').forEach(el => el.textContent = name);
+  document.querySelectorAll('.sidebar-avatar').forEach(el => renderAvatarEl(el, name, currentUser.avatar_path));
+  document.querySelectorAll('.sidebar-name').forEach(el => el.innerHTML = `${esc(name)} ${roleBadgeHtml(currentUser)}`);
   document.querySelectorAll('.sidebar-sub').forEach(el => el.textContent = sub);
 
+  setVerificationBadge(currentUser.verification_status);
+
   if (isFreelancer) {
-    const fields = [currentUser.full_name, currentUser.phone, currentUser.specialization, currentUser.about];
+    const fields = [currentUser.first_name, currentUser.phone, currentUser.specialization, currentUser.about];
     const pct = Math.round(fields.filter(Boolean).length / fields.length * 100);
     document.getElementById('profile-completeness-pct').textContent = pct + '%';
     document.getElementById('profile-completeness-bar').style.width = pct + '%';
@@ -167,12 +170,15 @@ async function loadFreelancerDashboard() {
 }
 
 function offerCardFreelancer(o, alreadyBid) {
+  const clientLabel = o.client_company_name ? esc(o.client_company_name) : 'Частное лицо';
+  const clientBadge = o.client_verification_status === 'verified' ? '<span class="badge bg-success ms-1">✓</span>' : '';
   return `
     <div class="card offer-card mb-3 p-3">
       <div class="d-flex justify-content-between text-muted small mb-2">
         <span>Опубликовано ${timeAgo(o.created_at)}</span>
         <span>Заявок: ${o.bid_count || 0}</span>
       </div>
+      <div class="text-muted small mb-1">${clientLabel}${clientBadge}</div>
       <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
       <p class="text-muted small mb-2">${esc(o.description || '')}</p>
       <div class="d-flex justify-content-between align-items-center">

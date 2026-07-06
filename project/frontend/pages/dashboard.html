@@ -13,17 +13,28 @@
 <!-- ── NAVBAR ─────────────────────────────────────────────────────────────── -->
 <nav class="navbar navbar-dark bg-dark px-4">
   <div class="d-flex align-items-center gap-4">
-    <a class="navbar-brand fw-bold mb-0" href="dashboard.html">🏗 NovaBuild</a>
-    <a class="text-white small text-decoration-none fw-semibold" href="dashboard.html">Дашборд</a>
+    <a class="navbar-brand fw-bold mb-0" href="dashboard.html" id="nav-brand">🏗 NovaBuild</a>
+    <a class="text-white small text-decoration-none fw-semibold" href="dashboard.html" id="nav-home-link">Дашборд</a>
   </div>
-  <div class="dropdown">
-    <button class="btn btn-outline-light rounded-circle avatar-btn" type="button" id="nav-avatar" data-bs-toggle="dropdown" aria-expanded="false">?</button>
-    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-avatar">
-      <li><span class="dropdown-item-text small text-muted" id="nav-email"></span></li>
-      <li><hr class="dropdown-divider"></li>
-      <li><a class="dropdown-item" href="cabinet.html">Профиль</a></li>
-      <li><a class="dropdown-item" href="#" onclick="logout()">Выйти</a></li>
-    </ul>
+  <div class="d-flex align-items-center gap-2">
+    <div class="dropdown">
+      <button class="btn btn-outline-light rounded-circle avatar-btn position-relative" type="button" id="nav-bell" data-bs-toggle="dropdown" aria-expanded="false" title="Уведомления">
+        🔔
+        <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger rounded-circle" id="bell-dot" style="display:none"></span>
+      </button>
+      <div class="dropdown-menu dropdown-menu-end p-0 notifications-dropdown" id="notifications-list">
+        <div class="text-muted small p-3 text-center">Загрузка...</div>
+      </div>
+    </div>
+    <div class="dropdown">
+      <button class="btn btn-outline-light rounded-circle avatar-btn" type="button" id="nav-avatar" data-bs-toggle="dropdown" aria-expanded="false">?</button>
+      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-avatar">
+        <li><span class="dropdown-item-text small text-muted" id="nav-email"></span></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="cabinet.html">Профиль</a></li>
+        <li><a class="dropdown-item" href="#" onclick="logout()">Выйти</a></li>
+      </ul>
+    </div>
   </div>
 </nav>
 
@@ -45,6 +56,9 @@
             <div class="fw-semibold sidebar-name">—</div>
             <div class="text-muted small sidebar-sub"></div>
           </div>
+        </div>
+        <div class="mb-3">
+          <span class="badge verification-badge bg-warning text-dark" style="display:none"></span>
         </div>
         <a href="cabinet.html" class="btn btn-sm btn-outline-secondary w-100 mb-2">Редактировать профиль</a>
         <button class="btn btn-sm btn-primary w-100" onclick="openCreateOffer()">+ Разместить оффер</button>
@@ -80,7 +94,7 @@
           </div>
         </div>
         <div class="mb-3">
-          <span id="verification-badge" class="badge bg-warning text-dark" style="display:none"></span>
+          <span class="badge verification-badge bg-warning text-dark" style="display:none"></span>
         </div>
         <div class="mb-3">
           <div class="d-flex justify-content-between small text-muted mb-1">

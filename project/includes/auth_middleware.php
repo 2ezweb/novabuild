@@ -40,3 +40,13 @@ function require_auth(): array {
     }
     return $payload;
 }
+
+function require_admin(): array {
+    $me = require_auth();
+    if ($me['role'] !== 'admin') {
+        http_response_code(403);
+        echo json_encode(['error' => 'Admins only']);
+        exit;
+    }
+    return $me;
+}

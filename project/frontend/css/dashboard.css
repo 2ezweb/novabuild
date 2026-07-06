@@ -7,4 +7,6 @@
   font-size: 1.25rem;
   font-weight: 600;
   flex-shrink: 0;
+  background-size: cover;
+  background-position: center;
 }

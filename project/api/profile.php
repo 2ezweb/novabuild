@@ -20,29 +20,62 @@ if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
 
 $body = json_decode(file_get_contents('php://input'), true) ?? [];
 
+// ─── SHARED: name (users table, every role) ──────────────────────────────────
+$first_name = trim($body['first_name'] ?? '');
+$last_name  = trim($body['last_name'] ?? '');
+
+if (!$first_name) {
+    http_response_code(422);
+    echo json_encode(['error' => 'Укажите имя']);
+    exit;
+}
+
+$db->prepare('UPDATE users SET first_name = ?, last_name = ? WHERE id = ?')
+   ->execute([$first_name, $last_name ?: null, $me['user_id']]);
+
+// ─── ADMIN: also allowed to change their login (users.email) ────────────────
+if ($me['role'] === 'admin') {
+    $login = trim($body['login'] ?? '');
+    if ($login) {
+        $stmt = $db->prepare('SELECT id FROM users WHERE email = ? AND id != ?');
+        $stmt->execute([$login, $me['user_id']]);
+        if ($stmt->fetch()) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Логин уже занят']);
+            exit;
+        }
+        $db->prepare('UPDATE users SET email = ? WHERE id = ?')->execute([$login, $me['user_id']]);
+    }
+
+    echo json_encode(['first_name' => $first_name, 'last_name' => $last_name]);
+    exit;
+}
+
 // ─── FREELANCER ───────────────────────────────────────────────────────────────
 if ($me['role'] === 'freelancer') {
-    $full_name      = trim($body['full_name'] ?? '');
     $phone          = trim($body['phone'] ?? '');
+    $website        = trim($body['website'] ?? '');
     $specialization = trim($body['specialization'] ?? '');
     $about          = trim($body['about'] ?? '');
 
-    if (!$full_name) {
+    if (mb_strlen($about) > 3000) {
         http_response_code(422);
-        echo json_encode(['error' => 'Укажите имя']);
+        echo json_encode(['error' => 'Описание не должно превышать 3000 символов']);
         exit;
     }
 
     $stmt = $db->prepare('
         UPDATE freelancer_profiles
-        SET full_name = ?, phone = ?, specialization = ?, about = ?
+        SET phone = ?, website = ?, specialization = ?, about = ?
         WHERE user_id = ?
     ');
-    $stmt->execute([$full_name, $phone, $specialization, $about, $me['user_id']]);
+    $stmt->execute([$phone, $website, $specialization, $about, $me['user_id']]);
 
     echo json_encode([
-        'full_name'      => $full_name,
+        'first_name'     => $first_name,
+        'last_name'      => $last_name,
         'phone'          => $phone,
+        'website'        => $website,
         'specialization' => $specialization,
         'about'          => $about,
     ]);
@@ -51,24 +84,14 @@ if ($me['role'] === 'freelancer') {
 
 // ─── CLIENT ───────────────────────────────────────────────────────────────────
 $company_name = trim($body['company_name'] ?? '');
-$contact_name = trim($body['contact_name'] ?? '');
 $phone        = trim($body['phone'] ?? '');
 
-if (!$contact_name) {
-    http_response_code(422);
-    echo json_encode(['error' => 'Укажите контактное имя']);
-    exit;
-}
-
-$stmt = $db->prepare('
-    UPDATE client_profiles
-    SET company_name = ?, contact_name = ?, phone = ?
-    WHERE user_id = ?
-');
-$stmt->execute([$company_name, $contact_name, $phone, $me['user_id']]);
+$stmt = $db->prepare('UPDATE client_profiles SET company_name = ?, phone = ? WHERE user_id = ?');
+$stmt->execute([$company_name ?: null, $phone, $me['user_id']]);
 
 echo json_encode([
+    'first_name'   => $first_name,
+    'last_name'    => $last_name,
     'company_name' => $company_name,
-    'contact_name' => $contact_name,
     'phone'        => $phone,
 ]);

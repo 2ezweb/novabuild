@@ -8,6 +8,35 @@ function esc(s)   { return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':
 
 function initials(name) { return String(name || '?').trim().charAt(0).toUpperCase(); }
 
+function displayName(me) {
+  return me.first_name || me.company_name || me.email;
+}
+
+// avatar_path is stored relative to /project/; pages live in /project/frontend/pages/
+function avatarUrl(path) { return path ? '../../' + path : null; }
+
+// Sets a circular avatar element to either the uploaded photo or an initial-on-background fallback.
+function renderAvatarEl(el, name, avatarPath) {
+  if (!el) return;
+  const url = avatarUrl(avatarPath);
+  if (url) {
+    el.style.backgroundImage = `url('${url}')`;
+    el.style.backgroundSize = 'cover';
+    el.style.backgroundPosition = 'center';
+    el.textContent = '';
+  } else {
+    el.style.backgroundImage = '';
+    el.textContent = initials(name);
+  }
+}
+
+// Small badge shown next to a display name: gold for admin, green check for verified peers.
+function roleBadgeHtml(me) {
+  if (me.role === 'admin') return '<span class="badge badge-admin ms-1">★ Админ</span>';
+  if (me.verification_status === 'verified') return '<span class="badge bg-success ms-1">✓</span>';
+  return '';
+}
+
 function timeAgo(mysqlDatetime) {
   const diffMin = Math.floor((Date.now() - new Date(mysqlDatetime.replace(' ', 'T')).getTime()) / 60000);
   if (diffMin < 1)   return 'только что';
@@ -83,8 +112,18 @@ async function requireAuth() {
     const me = await apiFetch('/me.php');
     const label = document.getElementById('nav-email');
     if (label) label.textContent = me.email;
-    const avatar = document.getElementById('nav-avatar');
-    if (avatar) avatar.textContent = initials(me.full_name || me.company_name || me.email);
+    renderAvatarEl(document.getElementById('nav-avatar'), displayName(me), me.avatar_path);
+
+    const homeHref = me.role === 'admin' ? 'admin.html' : 'dashboard.html';
+    const brand = document.getElementById('nav-brand');
+    if (brand) brand.href = homeHref;
+    const homeLink = document.getElementById('nav-home-link');
+    if (homeLink) {
+      homeLink.href = homeHref;
+      homeLink.textContent = me.role === 'admin' ? 'Админка' : 'Дашборд';
+    }
+
+    initNotificationBell();
     return me;
   } catch {
     localStorage.removeItem('token');
@@ -100,17 +139,61 @@ function logout() {
 
 // ─── SHARED UI HELPERS ────────────────────────────────────────────────────────
 function setVerificationBadge(status) {
-  const badge = document.getElementById('verification-badge');
-  if (!badge) return;
-  const map = {
-    verified: ['bg-success', '✓ Верифицирован'],
-    pending:  ['bg-warning text-dark', '⏳ На проверке'],
-    rejected: ['bg-danger', '✗ Отклонено'],
-  };
-  const [cls, label] = map[status] ?? map.pending;
-  badge.className = `badge ${cls}`;
-  badge.textContent = label;
-  badge.style.display = '';
+  document.querySelectorAll('.verification-badge').forEach(badge => {
+    if (!status || status === 'none') {
+      badge.style.display = 'none';
+      return;
+    }
+    const map = {
+      verified: ['bg-success', '✓ Верифицирован'],
+      pending:  ['bg-warning text-dark', '⏳ На проверке'],
+      rejected: ['bg-danger', '✗ Отклонено'],
+    };
+    const [cls, label] = map[status] ?? map.pending;
+    badge.className = `badge verification-badge ${cls}`;
+    badge.textContent = label;
+    badge.style.display = '';
+  });
+}
+
+// ─── NOTIFICATIONS ────────────────────────────────────────────────────────────
+async function initNotificationBell() {
+  const bellBtn = document.getElementById('nav-bell');
+  if (!bellBtn) return;
+  bellBtn.addEventListener('click', loadNotifications);
+  loadNotifications();
+}
+
+async function loadNotifications() {
+  const list = document.getElementById('notifications-list');
+  const dot  = document.getElementById('bell-dot');
+  if (!list) return;
+  try {
+    const items = await apiFetch('/notifications.php');
+    if (dot) dot.style.display = items.some(n => !n.is_read) ? '' : 'none';
+
+    if (!items.length) {
+      list.innerHTML = '<div class="text-muted small p-3 text-center">Уведомлений нет</div>';
+      return;
+    }
+    list.innerHTML = items.map(n => `
+      <div class="notification-item p-2 ${n.is_read ? '' : 'notification-unread'}" onclick="markNotificationRead(${n.id}, this)">
+        <div class="small">${esc(n.message)}</div>
+        <div class="text-muted" style="font-size:.75rem">${timeAgo(n.created_at)}</div>
+      </div>
+    `).join('');
+  } catch (e) {
+    list.innerHTML = `<div class="text-danger small p-3">${esc(e.message)}</div>`;
+  }
+}
+
+async function markNotificationRead(id, el) {
+  el.classList.remove('notification-unread');
+  try {
+    await apiPost('/notifications.php', { action: 'mark_read', id });
+    const dot = document.getElementById('bell-dot');
+    if (dot && !document.querySelectorAll('.notification-unread').length) dot.style.display = 'none';
+  } catch { /* non-critical */ }
 }
 
 function statusLabel(s) {

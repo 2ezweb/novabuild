@@ -13,68 +13,133 @@
 <!-- ── NAVBAR ─────────────────────────────────────────────────────────────── -->
 <nav class="navbar navbar-dark bg-dark px-4">
   <div class="d-flex align-items-center gap-4">
-    <a class="navbar-brand fw-bold mb-0" href="dashboard.html">🏗 NovaBuild</a>
-    <a class="text-white small text-decoration-none fw-semibold" href="dashboard.html">Дашборд</a>
+    <a class="navbar-brand fw-bold mb-0" href="dashboard.html" id="nav-brand">🏗 NovaBuild</a>
+    <a class="text-white small text-decoration-none fw-semibold" href="dashboard.html" id="nav-home-link">Дашборд</a>
   </div>
-  <div class="dropdown">
-    <button class="btn btn-outline-light rounded-circle avatar-btn" type="button" id="nav-avatar" data-bs-toggle="dropdown" aria-expanded="false">?</button>
-    <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-avatar">
-      <li><span class="dropdown-item-text small text-muted" id="nav-email"></span></li>
-      <li><hr class="dropdown-divider"></li>
-      <li><a class="dropdown-item" href="cabinet.html">Профиль</a></li>
-      <li><a class="dropdown-item" href="#" onclick="logout()">Выйти</a></li>
-    </ul>
+  <div class="d-flex align-items-center gap-2">
+    <div class="dropdown">
+      <button class="btn btn-outline-light rounded-circle avatar-btn position-relative" type="button" id="nav-bell" data-bs-toggle="dropdown" aria-expanded="false" title="Уведомления">
+        🔔
+        <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger rounded-circle" id="bell-dot" style="display:none"></span>
+      </button>
+      <div class="dropdown-menu dropdown-menu-end p-0 notifications-dropdown" id="notifications-list">
+        <div class="text-muted small p-3 text-center">Загрузка...</div>
+      </div>
+    </div>
+    <div class="dropdown">
+      <button class="btn btn-outline-light rounded-circle avatar-btn" type="button" id="nav-avatar" data-bs-toggle="dropdown" aria-expanded="false">?</button>
+      <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-avatar">
+        <li><span class="dropdown-item-text small text-muted" id="nav-email"></span></li>
+        <li><hr class="dropdown-divider"></li>
+        <li><a class="dropdown-item" href="cabinet.html">Профиль</a></li>
+        <li><a class="dropdown-item" href="#" onclick="logout()">Выйти</a></li>
+      </ul>
+    </div>
   </div>
 </nav>
 
 <div class="container py-5">
   <div class="row justify-content-center">
     <div class="col-md-6">
-      <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 class="fw-bold mb-0">Личный кабинет</h2>
-        <span id="verification-badge" class="badge bg-warning text-dark" style="display:none"></span>
-      </div>
+      <h2 class="fw-bold mb-4">Личный кабинет</h2>
 
       <div id="profile-error" class="alert alert-danger d-none"></div>
       <div id="profile-success" class="alert alert-success d-none">Профиль сохранён</div>
 
+      <!-- avatar + verification -->
+      <div class="d-flex align-items-center gap-3 mb-4">
+        <div class="position-relative">
+          <div class="avatar-xl rounded-circle bg-primary text-white d-flex align-items-center justify-content-center profile-avatar" id="profile-avatar">?</div>
+          <label class="avatar-upload-btn" title="Загрузить фото (JPEG/PNG, до 5МБ)">
+            📷
+            <input type="file" accept="image/jpeg,image/png" id="avatar-input" class="d-none" onchange="uploadAvatar(this)">
+          </label>
+        </div>
+        <div>
+          <span class="badge verification-badge bg-warning text-dark" style="display:none"></span>
+          <div id="verification-action" class="mt-2"></div>
+        </div>
+      </div>
+
+      <!-- shared name fields -->
+      <div class="mb-3">
+        <label class="form-label">Имя</label>
+        <input type="text" class="form-control" id="profile-first-name">
+      </div>
+      <div class="mb-3" id="last-name-field">
+        <label class="form-label">Фамилия <span class="text-muted small">(видна только администратору)</span></label>
+        <input type="text" class="form-control" id="profile-last-name">
+      </div>
+
       <!-- freelancer fields -->
       <div id="profile-fields-freelancer" style="display:none">
         <div class="mb-3">
-          <label class="form-label">Полное имя</label>
-          <input type="text" class="form-control" id="profile-full-name">
-        </div>
-        <div class="mb-3">
           <label class="form-label">Телефон</label>
           <input type="text" class="form-control" id="profile-phone-fl" placeholder="+380 50 000 00 00">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Вебсайт <span class="text-muted small">(опционально)</span></label>
+          <input type="text" class="form-control" id="profile-website" placeholder="https://...">
         </div>
         <div class="mb-3">
           <label class="form-label">Специализация</label>
           <input type="text" class="form-control" id="profile-specialization" placeholder="Плиточник, электрик...">
         </div>
         <div class="mb-3">
-          <label class="form-label">О себе</label>
-          <textarea class="form-control" id="profile-about" rows="3"></textarea>
+          <label class="form-label d-flex justify-content-between">
+            <span>Описание профиля</span>
+            <span class="text-muted small"><span id="about-count">0</span>/3000</span>
+          </label>
+          <textarea class="form-control" id="profile-about" rows="5" maxlength="3000" oninput="document.getElementById('about-count').textContent = this.value.length"></textarea>
         </div>
       </div>
 
       <!-- client fields -->
       <div id="profile-fields-client" style="display:none">
         <div class="mb-3">
-          <label class="form-label">Компания</label>
+          <label class="form-label">Компания <span class="text-muted small">(опционально — без неё фрилансеры видят вас как частное лицо)</span></label>
           <input type="text" class="form-control" id="profile-company-name">
-        </div>
-        <div class="mb-3">
-          <label class="form-label">Контактное имя</label>
-          <input type="text" class="form-control" id="profile-contact-name">
         </div>
         <div class="mb-3">
           <label class="form-label">Телефон</label>
           <input type="text" class="form-control" id="profile-phone-cl" placeholder="+380 50 000 00 00">
         </div>
+        <div class="mb-3">
+          <label class="form-label">Email <span class="text-muted small">(виден только администратору)</span></label>
+          <input type="text" class="form-control" id="profile-email-display" disabled>
+        </div>
+      </div>
+
+      <!-- admin fields -->
+      <div id="profile-fields-admin" style="display:none">
+        <div class="mb-3">
+          <label class="form-label">Логин</label>
+          <input type="text" class="form-control" id="profile-login">
+        </div>
       </div>
 
       <button class="btn btn-primary" onclick="submitProfile()">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: VERIFICATION APPLICATION ─────────────────────────────────────── -->
+<div class="modal fade" id="verificationModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Заявка на верификацию</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div id="verification-error" class="alert alert-danger d-none"></div>
+        <p class="text-muted small">Загрузите скан или фото паспорта (PDF, PNG или JPEG, до 10МБ). Заявку рассмотрит администратор.</p>
+        <input type="file" class="form-control" accept="application/pdf,image/jpeg,image/png" id="verification-file">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-primary" onclick="submitVerification()">Отправить</button>
+      </div>
     </div>
   </div>
 </div>

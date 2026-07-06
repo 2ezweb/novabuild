@@ -29,10 +29,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         ');
         $stmt->execute([$me['user_id']]);
     } else {
-        // Freelancer sees open offers from everyone
+        // Freelancer sees open offers from everyone, plus who's behind them
+        // (company name, or "Частное лицо" if none, and their verification badge)
         $sql = '
-            SELECT o.*, COUNT(b.id) AS bid_count
+            SELECT o.*, COUNT(b.id) AS bid_count,
+                   cp.company_name AS client_company_name,
+                   u.verification_status AS client_verification_status
             FROM offers o
+            JOIN client_profiles cp ON cp.id = o.client_id
+            JOIN users u ON u.id = cp.user_id
             LEFT JOIN bids b ON b.offer_id = o.id
         ';
         $params = [];
