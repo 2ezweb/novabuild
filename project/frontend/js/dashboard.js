@@ -47,12 +47,13 @@ async function loadClientDashboard() {
     const totalBids = offers.reduce((sum, o) => sum + (o.bid_count || 0), 0);
     document.getElementById('stat-bids').textContent = totalBids;
 
+    const visibleOffers = offers.filter(o => o.status !== 'closed');
     const list = document.getElementById('client-offers-list');
-    if (!offers.length) {
+    if (!visibleOffers.length) {
       list.innerHTML = emptyState('Офферов пока нет. Разместите первый!');
       return;
     }
-    list.innerHTML = offers.map(offerCardClient).join('');
+    list.innerHTML = visibleOffers.map(offerCardClient).join('');
   } catch (e) {
     document.getElementById('client-offers-list').innerHTML =
       `<div class="alert alert-warning">${e.message}</div>`;
@@ -60,7 +61,6 @@ async function loadClientDashboard() {
 }
 
 function offerCardClient(o) {
-  const canManage = o.status !== 'closed';
   return `
     <div class="card offer-card mb-3 p-3">
       <div class="d-flex justify-content-between text-muted small mb-2">
@@ -75,11 +75,10 @@ function offerCardClient(o) {
           ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
           ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
         </div>
-        ${canManage ? `
-          <div class="d-flex gap-2">
-            <button class="btn btn-sm btn-outline-secondary" onclick="editOffer(${o.id})">Редактировать</button>
-            <button class="btn btn-sm btn-outline-danger" onclick="closeOffer(${o.id})">Закрыть</button>
-          </div>` : ''}
+        <div class="d-flex gap-2">
+          <button class="btn btn-sm btn-outline-secondary" onclick="editOffer(${o.id})">Редактировать</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="closeOffer(${o.id})">Закрыть</button>
+        </div>
       </div>
     </div>`;
 }

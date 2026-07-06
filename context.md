@@ -94,8 +94,10 @@ NovaBuild — Context File
   заголовок/текст кнопки переключаются в openCreateOffer()/editOffer(id) (dashboard.js). editOffer()
   берёт данные не из DOM, а из module-level массива clientOffers (заполняется в loadClientDashboard()) —
   так безопаснее, чем сериализовать description с кавычками/переносами строк в HTML-атрибут onclick.
-  closeOffer(id) — confirm() → PUT {id, status:'closed'}. Кнопки "Редактировать"/"Закрыть" в
-  offerCardClient() скрываются, если offer.status === 'closed' (уже закрытый оффер не трогаем).
+  closeOffer(id) — confirm() → PUT {id, status:'closed'}. Закрытые офферы (status==='closed') совсем
+  пропадают из списка "Мои офферы" (loadClientDashboard() фильтрует offers перед рендером карточек) —
+  по правке пользователя. Статы "Офферов размещено"/"Заявок получено" по-прежнему считаются по полному
+  списку offers (включая закрытые) — фильтруется только видимая лента, не агрегаты.
   common.js получил apiPut() (зеркало apiPost(), метод PUT).
 
 Email-верификация при регистрации (код на почту)
