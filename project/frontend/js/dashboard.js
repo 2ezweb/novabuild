@@ -78,6 +78,7 @@ function offerCardClient(o) {
           <span class="badge bg-secondary">${statusLabel(o.status)}</span>
           ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
           ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
+          ${o.attachment_count ? `<span class="badge bg-light text-dark border">📎 ${o.attachment_count}</span>` : ''}
         </div>
         <div class="d-flex gap-2">
           <a class="btn btn-sm btn-outline-primary" href="offer.html?id=${o.id}">Заявки${o.bid_count ? ` (${o.bid_count})` : ''}</a>
@@ -94,6 +95,8 @@ function openCreateOffer() {
   document.getElementById('offer-desc').value = '';
   document.getElementById('offer-budget').value = '';
   document.getElementById('offer-deadline').value = '';
+  document.getElementById('offer-files').value = '';
+  document.getElementById('offer-existing-files').innerHTML = '';
   document.getElementById('offerModalLabel').textContent = 'Новый оффер';
   document.getElementById('offer-submit-btn').textContent = 'Разместить';
   hideError('offer-error');
@@ -108,10 +111,43 @@ function editOffer(id) {
   document.getElementById('offer-desc').value = o.description || '';
   document.getElementById('offer-budget').value = o.budget || '';
   document.getElementById('offer-deadline').value = o.deadline || '';
+  document.getElementById('offer-files').value = '';
   document.getElementById('offerModalLabel').textContent = 'Редактировать оффер';
   document.getElementById('offer-submit-btn').textContent = 'Сохранить';
   hideError('offer-error');
+  loadOfferAttachmentsIntoEditModal(o.id);
   new bootstrap.Modal(document.getElementById('offerModal')).show();
+}
+
+function attachmentRow(a, deletable) {
+  return `
+    <div class="d-flex justify-content-between align-items-center border rounded px-2 py-1 mb-1 small">
+      <a href="../../${a.file_path}" target="_blank" rel="noopener" class="text-decoration-none">
+        ${fileIcon(a.mime_type)} ${esc(a.original_name)} <span class="text-muted">(${formatFileSize(a.size)})</span>
+      </a>
+      ${deletable ? `<button type="button" class="btn-close" style="font-size:.65rem" title="Удалить" onclick="deleteOfferAttachment(${a.id}, ${a.offer_id})"></button>` : ''}
+    </div>`;
+}
+
+async function loadOfferAttachmentsIntoEditModal(offerId) {
+  const container = document.getElementById('offer-existing-files');
+  container.innerHTML = '<p class="text-muted small">Загрузка...</p>';
+  try {
+    const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
+    container.innerHTML = attachments.map(a => attachmentRow({ ...a, offer_id: offerId }, true)).join('');
+  } catch {
+    container.innerHTML = '';
+  }
+}
+
+async function deleteOfferAttachment(id, offerId) {
+  if (!confirm('Удалить файл?')) return;
+  try {
+    await apiDelete('/offer_attachments.php', { id });
+    loadOfferAttachmentsIntoEditModal(offerId);
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 async function submitOffer() {
@@ -123,11 +159,22 @@ async function submitOffer() {
   hideError('offer-error');
   if (!title) return showError('offer-error', 'Укажите заголовок');
   try {
-    if (id) {
-      await apiPut('/offers.php', { id: Number(id), title, description, budget, deadline });
+    let offerId = Number(id) || null;
+    if (offerId) {
+      await apiPut('/offers.php', { id: offerId, title, description, budget, deadline });
     } else {
-      await apiPost('/offers.php', { title, description, budget, deadline });
+      const res = await apiPost('/offers.php', { title, description, budget, deadline });
+      offerId = res.id;
     }
+
+    const filesInput = document.getElementById('offer-files');
+    if (filesInput.files.length) {
+      const formData = new FormData();
+      formData.append('offer_id', offerId);
+      for (const file of filesInput.files) formData.append('files[]', file);
+      await apiUpload('/offer_attachments.php', formData);
+    }
+
     bootstrap.Modal.getInstance(document.getElementById('offerModal')).hide();
     loadClientDashboard();
   } catch (e) {
@@ -187,6 +234,7 @@ function offerCardFreelancer(o, alreadyBid) {
         <div class="d-flex gap-2 flex-wrap">
           ${o.budget   ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
           ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
+          ${o.attachment_count ? `<span class="badge bg-light text-dark border">📎 ${o.attachment_count}</span>` : ''}
         </div>
         ${alreadyBid
           ? `<span class="badge bg-success">✓ Заявка подана</span>`
@@ -196,22 +244,35 @@ function offerCardFreelancer(o, alreadyBid) {
     </div>`;
 }
 
-function openBidModal(offerId) {
+async function openBidModal(offerId) {
   document.getElementById('bid-offer-id').value = offerId;
   document.getElementById('bid-connects').value = 10;
   document.getElementById('bid-balance').textContent = currentUser.connects_balance ?? 0;
+  document.getElementById('bid-message').value = '';
   hideError('bid-error');
+
+  const container = document.getElementById('bid-attachments');
+  container.innerHTML = '';
+  try {
+    const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
+    if (attachments.length) {
+      container.innerHTML = '<label class="form-label">Файлы от заказчика</label>'
+        + attachments.map(a => attachmentRow(a, false)).join('');
+    }
+  } catch { /* non-critical */ }
+
   new bootstrap.Modal(document.getElementById('bidModal')).show();
 }
 
 async function submitBid() {
   const offerId  = Number(val('bid-offer-id'));
   const connects = Number(val('bid-connects'));
+  const message  = val('bid-message');
   hideError('bid-error');
   if (!connects || connects < 10) return showError('bid-error', 'Минимальная ставка — 10 коннектов');
 
   try {
-    const res = await apiPost('/bids.php', { offer_id: offerId, connects });
+    const res = await apiPost('/bids.php', { offer_id: offerId, connects, cover_note: message });
     bootstrap.Modal.getInstance(document.getElementById('bidModal')).hide();
 
     currentUser.connects_balance = res.connects_balance;

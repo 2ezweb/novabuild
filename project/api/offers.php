@@ -19,7 +19,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if ($me['role'] === 'client') {
         // Client sees only their own offers + bid count
         $stmt = $db->prepare('
-            SELECT o.*, COUNT(b.id) AS bid_count
+            SELECT o.*, COUNT(b.id) AS bid_count,
+                   (SELECT COUNT(*) FROM offer_attachments oa WHERE oa.offer_id = o.id) AS attachment_count
             FROM offers o
             JOIN client_profiles cp ON cp.id = o.client_id
             LEFT JOIN bids b ON b.offer_id = o.id
@@ -33,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         // (company name, or "Частное лицо" if none, and their verification badge)
         $sql = '
             SELECT o.*, COUNT(b.id) AS bid_count,
+                   (SELECT COUNT(*) FROM offer_attachments oa WHERE oa.offer_id = o.id) AS attachment_count,
                    cp.company_name AS client_company_name,
                    u.verification_status AS client_verification_status
             FROM offers o

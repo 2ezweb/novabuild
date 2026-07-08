@@ -155,6 +155,11 @@
             <input type="date" class="form-control" id="offer-deadline">
           </div>
         </div>
+        <div class="mb-3 mt-3">
+          <label class="form-label">Файлы <span class="text-muted small">(png, jpg, pdf, docx, xlsx — до 15МБ каждый)</span></label>
+          <div id="offer-existing-files" class="mb-2"></div>
+          <input type="file" class="form-control" id="offer-files" multiple accept=".png,.jpg,.jpeg,.pdf,.docx,.xlsx">
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -183,7 +188,12 @@
           <label class="form-label">Ставка, коннектов</label>
           <input type="number" class="form-control" id="bid-connects" min="10" step="1" value="10">
         </div>
-        <div class="text-muted small">Доступно: <span id="bid-balance">—</span> коннектов</div>
+        <div class="text-muted small mb-3">Доступно: <span id="bid-balance">—</span> коннектов</div>
+        <div class="mb-2">
+          <label class="form-label">Сообщение заказчику</label>
+          <textarea class="form-control" id="bid-message" rows="4" placeholder="Расскажите, почему стоит выбрать именно вас..."></textarea>
+        </div>
+        <div id="bid-attachments"></div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>

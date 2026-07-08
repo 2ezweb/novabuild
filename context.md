@@ -31,6 +31,8 @@ NovaBuild — Context File
     verification.php    — POST заявка на верификацию (client/freelancer), multipart-загрузка PDF/PNG/JPEG
     notifications.php   — GET мои уведомления / POST mark_read|mark_all_read
     admin.php           — admin-only: GET users|verification_requests|document, POST approve|reject
+    offer_attachments.php — GET список файлов оффера (любая роль) / POST загрузка (владелец-клиент,
+                          multipart, поле files[]) / DELETE удалить один файл (владелец-клиент)
   /includes
     db.php              — подключение PDO к MySQL (get_db())
     jwt.php             — jwt_encode() / jwt_decode(), секрет в JWT_SECRET
@@ -41,6 +43,8 @@ NovaBuild — Context File
     avatars/            — публично отдаётся веб-сервером напрямую (аватарки не приватные)
     verification/       — .htaccess (Require all denied) — НЕ отдаётся напрямую, только через
                           admin.php?action=document (стримится PHP после require_admin() + finfo)
+    offers/             — публично отдаётся напрямую (файлы офферов не приватные — их и так видят
+                          все фрилансеры в открытых офферах)
   /sql
     schema.sql          — полный слепок структуры БД, см. ниже
   /frontend
@@ -54,14 +58,16 @@ NovaBuild — Context File
       admin.html           — админка: список юзеров + заявки на верификацию (навигация в сайдбаре справа)
       offer.html            — client-only: детали оффера + ранжированный список заявок фрилансеров
     /js
-      common.js           — apiFetch/apiPost/apiPut (кидают Error с полными полями ответа, не только .message),
-                            esc/val/initials/displayName/avatarUrl/renderAvatarEl/roleBadgeHtml/timeAgo,
+      common.js           — apiFetch/apiPost/apiPut/apiDelete/apiUpload (кидают Error с полными полями
+                            ответа, не только .message), esc/val/initials/displayName/avatarUrl/
+                            renderAvatarEl/roleBadgeHtml/timeAgo/formatFileSize/fileIcon,
                             showError/hideError, requireAuth() (guard + navbar/bell init), logout(),
                             setVerificationBadge(), initNotificationBell()/loadNotifications()/markNotificationRead()
       auth.js             — doLogin() (редирект admin→admin.html по res.role), doRegister(), selectRole()
       verify.js            — doVerify(), doResend() — работают с localStorage.pending_email
       cabinet.js           — профиль (все 3 роли), загрузка аватара, подача заявки на верификацию
       dashboard.js         — офферы клиента, лента фрилансера (+ бейдж/компания клиента), модалка ставки
+                            (+ сообщение + файлы оффера), загрузка/удаление файлов оффера в модалке
       admin.js             — список юзеров, заявки на верификацию, approve/reject, просмотр документа
       offer.js              — загрузка оффера + ранжированного списка заявок (bidCard())
     /css
@@ -250,7 +256,45 @@ Email-верификация при регистрации (код на почт
   Принятие/отклонение конкретной заявки клиентом — НЕ реализовано в этом заходе (bids.status остаётся
   pending всегда, ENUM accepted/rejected пока не используется) — separate scope, не просили в этот раз.
 
-База данных — 6 таблиц
+Медиафайлы офферов + сообщение фрилансера при отклике — 2026-07-08
+
+  Новая таблица offer_attachments (offer_id FK ON DELETE CASCADE, file_path, original_name, mime_type,
+  size, created_at) — у оффера может быть много файлов, отдельная таблица, не колонка. Файлы лежат в
+  uploads/offers/ — отдаются публично напрямую (не приватные, их и так видит любой фрилансер по
+  открытому офферу), в отличие от uploads/verification/.
+
+  api/offer_attachments.php: GET (любая роль, просто по offer_id — фрилансеру тоже нужно смотреть
+  файлы перед тем как решить подавать заявку) / POST multipart (только владелец-клиент, поле files[] —
+  можно сразу несколько файлов, каждый валидируется независимо и не прошедшие проверку молча
+  пропускаются, а не роняют весь запрос) / DELETE (только владелец-клиент, по id одного файла).
+  Разрешены: png/jpg (image/png, image/jpeg через finfo), pdf (application/pdf через finfo), docx/xlsx —
+  это ZIP-контейнеры, finfo на них честно отвечает "application/zip" почти всегда, поэтому валидация
+  двухступенчатая: (1) finfo MIME должен быть каноничным OOXML-типом ИЛИ application/zip, (2) ZipArchive
+  реально открывает файл как валидный zip (расширение PHP `zip`, проверил что установлено) — так
+  переименованный в .docx текстовый файл гарантированно отсеивается, проверено вручную (curl не умеет
+  нормально грузить multipart с полем files[] на этой машине — баг конкретно тестового curl.exe
+  8.12.1 mingw64 на брекетах в имени поля, обошёл тестированием через PHP CURLFile напрямую; реальный
+  браузер это поле шлёт без проблем, это не баг приложения). Лимит 15МБ на файл.
+
+  Фронтенд: модалка оффера (dashboard.html/js) — file input (multiple, accept png/jpg/pdf/docx/xlsx),
+  при редактировании существующего оффера подгружается список уже прикреплённых файлов с кнопкой
+  удаления каждого; при сохранении оффера (create или edit) новые выбранные файлы грузятся отдельным
+  запросом сразу после успешного создания/обновления самого оффера (offer_id уже известен).
+  Бейдж "📎 N" на карточке оффера в обеих лентах (offers.php отдаёт attachment_count подзапросом).
+  Модалка ставки (bidModal) при открытии подгружает и показывает список файлов оффера (read-only,
+  просто ссылки на скачивание) — фрилансер видит, что приложил клиент, прежде чем решать ставку.
+
+  Сообщение фрилансера при отклике: bids.cover_note — колонка была в схеме с самого начала, но
+  фронтенд её никогда не заполнял. Теперь в bidModal есть textarea "Сообщение заказчику", уходит в
+  POST /api/bids.php как есть (бэкенд уже принимал это поле, менять не пришлось).
+  Усечение до 3 абзацев на стороне клиента: offer.js coverNoteHtml() режет note.split('\n') до первых
+  3 непустых строк, остальное прячет за display:none и ссылкой "Показать полностью" (toggleCoverNote()
+  меняет местами .d-none у preview/full блоков). ВАЖНО: усечение чисто визуальное на фронте — API
+  (GET /api/bids.php?offer_id=N) всегда отдаёт cover_note целиком, проверено вручную через curl
+  5-абзацным сообщением. Решение отрезать по переносам строк (не по символам) — это буквальная
+  трактовка "первые три абзаца" из ТЗ.
+
+База данных — 7 таблиц
 
 sqlusers                  — id, email (он же логин админа), password_hash, role ENUM(client|freelancer|admin),
                          first_name, last_name, avatar_path, status ENUM(active|banned),
@@ -266,6 +310,8 @@ bids                   — id, offer_id FK, freelancer_id FK→freelancer_profil
                          connects_spent INT DEFAULT 10, status ENUM(pending|accepted|rejected), created_at
                          UNIQUE KEY (offer_id, freelancer_id)
 notifications          — id, user_id FK ON DELETE CASCADE, type, message, is_read, created_at
+offer_attachments      — id, offer_id FK ON DELETE CASCADE, file_path, original_name, mime_type,
+                         size, created_at
 
 Что реализовано (ТАСК 1 + ТАСК 2 + ТАСК 3)
 

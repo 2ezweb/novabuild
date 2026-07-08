@@ -101,14 +101,7 @@ async function uploadAvatar(input) {
   formData.append('avatar', file);
 
   try {
-    const res = await fetch(API + '/avatar.php', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + localStorage.getItem('token') },
-      body: formData,
-    });
-    const data = await res.json();
-    if (!res.ok) throw apiError(data);
-
+    const data = await apiUpload('/avatar.php', formData);
     currentUser.avatar_path = data.avatar_path;
     renderAvatarEl(document.getElementById('profile-avatar'), displayName(currentUser), currentUser.avatar_path);
     renderAvatarEl(document.getElementById('nav-avatar'), displayName(currentUser), currentUser.avatar_path);
@@ -129,14 +122,7 @@ async function submitVerification() {
   formData.append('document', file);
 
   try {
-    const res = await fetch(API + '/verification.php', {
-      method: 'POST',
-      headers: { Authorization: 'Bearer ' + localStorage.getItem('token') },
-      body: formData,
-    });
-    const data = await res.json();
-    if (!res.ok) throw apiError(data);
-
+    await apiUpload('/verification.php', formData);
     bootstrap.Modal.getInstance(document.getElementById('verificationModal')).hide();
     currentUser = await apiFetch('/me.php');
     setVerificationBadge(currentUser.verification_status);

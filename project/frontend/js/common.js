@@ -100,6 +100,45 @@ async function apiPut(path, body) {
   return data;
 }
 
+async function apiDelete(path, body) {
+  const res = await fetch(API + path, {
+    method: 'DELETE',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization:  'Bearer ' + localStorage.getItem('token')
+    },
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw apiError(data);
+  return data;
+}
+
+async function apiUpload(path, formData) {
+  const res = await fetch(API + path, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + localStorage.getItem('token') },
+    body: formData,
+  });
+  const data = await res.json();
+  if (!res.ok) throw apiError(data);
+  return data;
+}
+
+function formatFileSize(bytes) {
+  if (bytes < 1024) return bytes + ' Б';
+  if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' КБ';
+  return (bytes / (1024 * 1024)).toFixed(1) + ' МБ';
+}
+
+function fileIcon(mime) {
+  if (mime === 'application/pdf') return '📄';
+  if (mime.startsWith('image/')) return '🖼️';
+  if (mime.includes('spreadsheet')) return '📊';
+  if (mime.includes('wordprocessing') || mime === 'application/zip') return '📝';
+  return '📎';
+}
+
 // ─── AUTH GUARD ───────────────────────────────────────────────────────────────
 // Call from protected pages (cabinet.html, dashboard.html) on load.
 // Resolves with the current user, or redirects to login.html and never resolves.
