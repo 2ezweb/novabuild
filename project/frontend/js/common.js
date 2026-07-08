@@ -166,7 +166,7 @@ function renderAttachments(container, attachments) {
   }
   if (files.length) {
     html += '<div class="d-flex flex-wrap gap-1">' + files.map(a => `
-      <a href="${assetUrl(a.file_path)}" target="_blank" rel="noopener" class="border rounded px-2 py-1 small text-decoration-none">
+      <a href="${assetUrl(a.file_path)}" target="_blank" rel="noopener" class="attachment-file-link border rounded px-2 py-1 small text-decoration-none">
         ${fileIcon(a.mime_type)} ${esc(a.original_name)} <span class="text-muted">(${formatFileSize(a.size)})</span>
       </a>`).join('') + '</div>';
   }

@@ -122,10 +122,10 @@ function editOffer(id) {
 function attachmentRow(a, deletable) {
   return `
     <div class="d-flex justify-content-between align-items-center border rounded px-2 py-1 mb-1 small">
-      <a href="${assetUrl(a.file_path)}" target="_blank" rel="noopener" class="text-decoration-none">
+      <a href="${assetUrl(a.file_path)}" target="_blank" rel="noopener" class="attachment-file-link text-decoration-none">
         ${fileIcon(a.mime_type)} ${esc(a.original_name)} <span class="text-muted">(${formatFileSize(a.size)})</span>
       </a>
-      ${deletable ? `<button type="button" class="btn-close" style="font-size:.65rem" title="Удалить" onclick="deleteOfferAttachment(${a.id}, ${a.offer_id})"></button>` : ''}
+      ${deletable ? `<button type="button" class="btn-close flex-shrink-0 ms-2" style="font-size:.65rem" title="Удалить" onclick="deleteOfferAttachment(${a.id}, ${a.offer_id})"></button>` : ''}
     </div>`;
 }
 

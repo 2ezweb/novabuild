@@ -34,6 +34,8 @@ body { background: #f8f9fa; }
 .attachment-thumb {
   width: 84px;
   height: 84px;
+  max-width: 84px;
+  max-height: 84px;
   object-fit: cover;
   border-radius: 6px;
   border: 1px solid #dee2e6;
@@ -41,6 +43,15 @@ body { background: #f8f9fa; }
   transition: transform .1s;
 }
 .attachment-thumb:hover { transform: scale(1.04); }
+
+.attachment-file-link {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+}
+
+/* Safety net: any stray <img> inside a modal never breaks out of it,
+   even if a specific size class wasn't applied to it. */
+.modal-body img { max-width: 100%; }
 
 .offer-title-link {
   cursor: pointer;
