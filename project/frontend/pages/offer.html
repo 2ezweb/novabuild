@@ -53,6 +53,15 @@
   </div>
 </div>
 
+<!-- ── FULLSCREEN IMAGE GALLERY ─────────────────────────────────────────────── -->
+<div id="image-gallery-overlay" class="align-items-center justify-content-center" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:1090;">
+  <button type="button" class="btn btn-light position-absolute" style="top:20px; right:20px;" onclick="closeGallery()">✕ Закрыть</button>
+  <button type="button" id="gallery-prev" class="btn btn-light position-absolute" style="left:20px; top:50%; transform:translateY(-50%);" onclick="galleryStep(-1)">‹</button>
+  <img id="gallery-image" style="max-width:90vw; max-height:85vh; object-fit:contain;">
+  <button type="button" id="gallery-next" class="btn btn-light position-absolute" style="right:20px; top:50%; transform:translateY(-50%);" onclick="galleryStep(1)">›</button>
+  <div id="gallery-counter" class="text-white position-absolute" style="bottom:20px; left:50%; transform:translateX(-50%);"></div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="../js/common.js"></script>
 <script src="../js/offer.js"></script>

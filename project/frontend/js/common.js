@@ -12,13 +12,19 @@ function displayName(me) {
   return me.first_name || me.company_name || me.email;
 }
 
-// avatar_path is stored relative to /project/; pages live in /project/frontend/pages/
-function avatarUrl(path) { return path ? '../../' + path : null; }
+// Uploaded file paths are stored relative to /project/; pages live in /project/frontend/pages/.
+// Used for avatars, verification docs (admin-only, via a different endpoint) and offer attachments.
+function assetUrl(path) { return path ? '../../' + path : null; }
+
+function truncateText(text, maxLen) {
+  if (!text || text.length <= maxLen) return text || '';
+  return text.slice(0, maxLen).trimEnd() + '…';
+}
 
 // Sets a circular avatar element to either the uploaded photo or an initial-on-background fallback.
 function renderAvatarEl(el, name, avatarPath) {
   if (!el) return;
-  const url = avatarUrl(avatarPath);
+  const url = assetUrl(avatarPath);
   if (url) {
     el.style.backgroundImage = `url('${url}')`;
     el.style.backgroundSize = 'cover';
@@ -138,6 +144,70 @@ function fileIcon(mime) {
   if (mime.includes('wordprocessing') || mime === 'application/zip') return '📝';
   return '📎';
 }
+
+// Renders image attachments as a thumbnail grid (click opens the fullscreen gallery)
+// and everything else as downloadable file rows. Shared by the offer detail modal and offer.html.
+function renderAttachments(container, attachments) {
+  if (!attachments.length) {
+    container.innerHTML = '<p class="text-muted small mb-0">Файлов нет.</p>';
+    return;
+  }
+
+  const images = attachments.filter(a => a.mime_type.startsWith('image/'));
+  const files  = attachments.filter(a => !a.mime_type.startsWith('image/'));
+  const imageUrls = images.map(a => assetUrl(a.file_path));
+
+  let html = '';
+  if (images.length) {
+    html += '<div class="d-flex flex-wrap gap-2 mb-2">' + images.map((a, i) => `
+      <img src="${assetUrl(a.file_path)}" alt="${esc(a.original_name)}" title="${esc(a.original_name)}"
+           class="attachment-thumb" onclick="openGallery(${esc(JSON.stringify(imageUrls))}, ${i})">
+    `).join('') + '</div>';
+  }
+  if (files.length) {
+    html += '<div class="d-flex flex-wrap gap-1">' + files.map(a => `
+      <a href="${assetUrl(a.file_path)}" target="_blank" rel="noopener" class="border rounded px-2 py-1 small text-decoration-none">
+        ${fileIcon(a.mime_type)} ${esc(a.original_name)} <span class="text-muted">(${formatFileSize(a.size)})</span>
+      </a>`).join('') + '</div>';
+  }
+  container.innerHTML = html;
+}
+
+// ─── FULLSCREEN IMAGE GALLERY ─────────────────────────────────────────────────
+let galleryImages = [];
+let galleryIndex = 0;
+
+function openGallery(images, index) {
+  galleryImages = images;
+  galleryIndex = index;
+  renderGalleryImage();
+  document.getElementById('image-gallery-overlay').style.display = 'flex';
+}
+
+function closeGallery() {
+  document.getElementById('image-gallery-overlay').style.display = 'none';
+}
+
+function galleryStep(delta) {
+  galleryIndex = (galleryIndex + delta + galleryImages.length) % galleryImages.length;
+  renderGalleryImage();
+}
+
+function renderGalleryImage() {
+  document.getElementById('gallery-image').src = galleryImages[galleryIndex];
+  document.getElementById('gallery-counter').textContent = `${galleryIndex + 1} / ${galleryImages.length}`;
+  const multi = galleryImages.length > 1;
+  document.getElementById('gallery-prev').style.display = multi ? '' : 'none';
+  document.getElementById('gallery-next').style.display = multi ? '' : 'none';
+}
+
+document.addEventListener('keydown', (e) => {
+  const overlay = document.getElementById('image-gallery-overlay');
+  if (!overlay || overlay.style.display === 'none') return;
+  if (e.key === 'Escape') closeGallery();
+  if (e.key === 'ArrowLeft') galleryStep(-1);
+  if (e.key === 'ArrowRight') galleryStep(1);
+});
 
 // ─── AUTH GUARD ───────────────────────────────────────────────────────────────
 // Call from protected pages (cabinet.html, dashboard.html) on load.

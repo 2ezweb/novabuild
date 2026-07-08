@@ -6,3 +6,11 @@ Thumbs.db
 *.log
 .env
 vendor/
+
+# runtime uploads — keep the folder structure, not user-uploaded content
+project/uploads/avatars/*
+!project/uploads/avatars/.gitkeep
+project/uploads/verification/*
+!project/uploads/verification/.htaccess
+project/uploads/offers/*
+!project/uploads/offers/.gitkeep

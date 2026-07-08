@@ -71,8 +71,8 @@ function offerCardClient(o) {
         <span>Опубликовано ${timeAgo(o.created_at)}</span>
         <span>Заявок: ${o.bid_count || 0}</span>
       </div>
-      <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
-      <p class="text-muted small mb-2">${esc(o.description || '')}</p>
+      <h6 class="fw-semibold mb-1"><a class="offer-title-link" onclick="openOfferDetail(${o.id})">${esc(o.title)}</a></h6>
+      <p class="text-muted small mb-2">${esc(truncateText(o.description, 150))}</p>
       <div class="d-flex justify-content-between align-items-end flex-wrap gap-2">
         <div class="d-flex gap-2 flex-wrap">
           <span class="badge bg-secondary">${statusLabel(o.status)}</span>
@@ -122,7 +122,7 @@ function editOffer(id) {
 function attachmentRow(a, deletable) {
   return `
     <div class="d-flex justify-content-between align-items-center border rounded px-2 py-1 mb-1 small">
-      <a href="../../${a.file_path}" target="_blank" rel="noopener" class="text-decoration-none">
+      <a href="${assetUrl(a.file_path)}" target="_blank" rel="noopener" class="text-decoration-none">
         ${fileIcon(a.mime_type)} ${esc(a.original_name)} <span class="text-muted">(${formatFileSize(a.size)})</span>
       </a>
       ${deletable ? `<button type="button" class="btn-close" style="font-size:.65rem" title="Удалить" onclick="deleteOfferAttachment(${a.id}, ${a.offer_id})"></button>` : ''}
@@ -193,18 +193,22 @@ async function closeOffer(id) {
 }
 
 // ─── FREELANCER ───────────────────────────────────────────────────────────────
+let freelancerOffers = [];
+let bidOfferIds = new Set();
+
 async function loadFreelancerDashboard() {
   try {
     const [offers, myBids] = await Promise.all([
       apiFetch('/offers.php?status=open'),
       apiFetch('/bids.php?my=1'),
     ]);
+    freelancerOffers = offers;
 
     document.getElementById('stat-open-offers').textContent = offers.length;
     document.getElementById('stat-my-bids').textContent     = myBids.length;
 
     // mark which offers I've already bid on
-    const bidOfferIds = new Set(myBids.map(b => b.offer_id));
+    bidOfferIds = new Set(myBids.map(b => b.offer_id));
 
     const list = document.getElementById('freelancer-offers-list');
     if (!offers.length) {
@@ -228,8 +232,8 @@ function offerCardFreelancer(o, alreadyBid) {
         <span>Заявок: ${o.bid_count || 0}</span>
       </div>
       <div class="text-muted small mb-1">${clientLabel}${clientBadge}</div>
-      <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
-      <p class="text-muted small mb-2">${esc(o.description || '')}</p>
+      <h6 class="fw-semibold mb-1"><a class="offer-title-link" onclick="openOfferDetail(${o.id})">${esc(o.title)}</a></h6>
+      <p class="text-muted small mb-2">${esc(truncateText(o.description, 150))}</p>
       <div class="d-flex justify-content-between align-items-center">
         <div class="d-flex gap-2 flex-wrap">
           ${o.budget   ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
@@ -256,12 +260,60 @@ async function openBidModal(offerId) {
   try {
     const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
     if (attachments.length) {
-      container.innerHTML = '<label class="form-label">Файлы от заказчика</label>'
-        + attachments.map(a => attachmentRow(a, false)).join('');
+      container.innerHTML = '<label class="form-label">Файлы от заказчика</label><div></div>';
+      renderAttachments(container.querySelector('div'), attachments);
     }
   } catch { /* non-critical */ }
 
   new bootstrap.Modal(document.getElementById('bidModal')).show();
+}
+
+// ─── OFFER DETAIL MODAL ───────────────────────────────────────────────────────
+async function openOfferDetail(offerId) {
+  const isClient = currentUser.role === 'client';
+  const source = isClient ? clientOffers : freelancerOffers;
+  const o = source.find(x => x.id === offerId);
+  if (!o) return;
+
+  document.getElementById('offer-detail-title').textContent = o.title;
+  document.getElementById('offer-detail-description').textContent = o.description || '';
+  document.getElementById('offer-detail-badges').innerHTML = `
+    <span class="badge bg-secondary">${statusLabel(o.status)}</span>
+    ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
+    ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
+  `;
+
+  const clientInfoEl = document.getElementById('offer-detail-client-info');
+  if (isClient) {
+    clientInfoEl.innerHTML = '';
+  } else {
+    const clientLabel = o.client_company_name ? esc(o.client_company_name) : 'Частное лицо';
+    const clientBadge = o.client_verification_status === 'verified' ? '<span class="badge bg-success ms-1">✓</span>' : '';
+    clientInfoEl.innerHTML = `<div class="text-muted small mb-2">Заказчик: ${clientLabel}${clientBadge}</div>`;
+  }
+
+  const bidBtn = document.getElementById('offer-detail-bid-btn');
+  if (!isClient && !bidOfferIds.has(offerId)) {
+    bidBtn.style.display = '';
+    bidBtn.onclick = () => {
+      const detailModalEl = document.getElementById('offerDetailModal');
+      detailModalEl.addEventListener('hidden.bs.modal', () => openBidModal(offerId), { once: true });
+      bootstrap.Modal.getInstance(detailModalEl).hide();
+    };
+  } else {
+    bidBtn.style.display = 'none';
+  }
+
+  const attachmentsEl = document.getElementById('offer-detail-attachments');
+  attachmentsEl.innerHTML = '<p class="text-muted small">Загрузка...</p>';
+  try {
+    const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
+    renderAttachments(attachmentsEl, attachments);
+  } catch (e) {
+    attachmentsEl.innerHTML = `<p class="text-danger small">${esc(e.message)}</p>`;
+  }
+
+  new bootstrap.Modal(document.getElementById('offerDetailModal')).show();
 }
 
 async function submitBid() {

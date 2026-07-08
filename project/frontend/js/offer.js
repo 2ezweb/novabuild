@@ -51,10 +51,8 @@ async function loadOfferAttachments() {
   try {
     const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
     if (!attachments.length) return;
-    container.innerHTML = '<div class="text-muted small mb-1">Файлы:</div>' + attachments.map(a => `
-      <a href="../../${a.file_path}" target="_blank" rel="noopener" class="d-inline-block border rounded px-2 py-1 mb-1 me-1 small text-decoration-none">
-        ${fileIcon(a.mime_type)} ${esc(a.original_name)} <span class="text-muted">(${formatFileSize(a.size)})</span>
-      </a>`).join('');
+    container.innerHTML = '<div class="text-muted small mb-1">Файлы:</div><div></div>';
+    renderAttachments(container.querySelector('div'), attachments);
   } catch { /* non-critical */ }
 }
 
@@ -78,7 +76,7 @@ function bidCard(b, rank) {
   const rankBadge = rank <= 5
     ? `<span class="badge bg-primary">#${rank}</span>`
     : `<span class="badge bg-light text-dark border">#${rank}</span>`;
-  const avatarUrlValue = avatarUrl(b.avatar_path);
+  const avatarUrlValue = assetUrl(b.avatar_path);
   const avatarStyle = avatarUrlValue
     ? `background-image:url('${avatarUrlValue}');background-size:cover;background-position:center`
     : '';
