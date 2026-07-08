@@ -18,7 +18,7 @@ if ($me['role'] === 'freelancer') {
     $stmt = $db->prepare('
         SELECT u.id, u.email, u.role, u.status, u.created_at,
                u.first_name, u.last_name, u.avatar_path, u.verification_status,
-               fp.phone, fp.website, fp.specialization, fp.about
+               fp.phone, fp.website, fp.specialization, fp.about, fp.connects_balance
         FROM users u
         LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
         WHERE u.id = ?

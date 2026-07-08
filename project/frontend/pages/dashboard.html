@@ -116,6 +116,10 @@
           <span class="text-muted small">Моих заявок</span>
           <span class="fw-bold" id="stat-my-bids">—</span>
         </div>
+        <div class="d-flex justify-content-between py-1">
+          <span class="text-muted small">Коннектов</span>
+          <span class="fw-bold" id="stat-connects">—</span>
+        </div>
       </div>
     </div>
   </div>
@@ -155,6 +159,35 @@
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
         <button class="btn btn-primary" id="offer-submit-btn" onclick="submitOffer()">Разместить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL: PLACE BID ─────────────────────────────────────────────────────── -->
+<div class="modal fade" id="bidModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title fw-bold">Подать заявку</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="bid-offer-id">
+        <div id="bid-error" class="alert alert-danger d-none"></div>
+        <p class="text-muted small">
+          Минимальная ставка — 10 коннектов. Чем больше поставите, тем выше место в списке
+          у заказчика (первые 5 мест — по величине ставки, остальные — в случайном порядке).
+        </p>
+        <div class="mb-2">
+          <label class="form-label">Ставка, коннектов</label>
+          <input type="number" class="form-control" id="bid-connects" min="10" step="1" value="10">
+        </div>
+        <div class="text-muted small">Доступно: <span id="bid-balance">—</span> коннектов</div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-primary" onclick="submitBid()">Отправить</button>
       </div>
     </div>
   </div>

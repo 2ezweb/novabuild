@@ -35,6 +35,7 @@ CREATE TABLE `bids` (
   `offer_id` int(11) NOT NULL,
   `freelancer_id` int(11) NOT NULL,
   `cover_note` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `connects_spent` int(11) NOT NULL DEFAULT 10,
   `status` enum('pending','accepted','rejected') COLLATE utf8mb4_unicode_ci DEFAULT 'pending',
   `created_at` timestamp NULL DEFAULT current_timestamp(),
   PRIMARY KEY (`id`),
@@ -77,6 +78,7 @@ CREATE TABLE `freelancer_profiles` (
   `website` varchar(255) COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `specialization` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
   `about` text COLLATE utf8mb4_unicode_ci DEFAULT NULL,
+  `connects_balance` int(11) NOT NULL DEFAULT 10000,
   PRIMARY KEY (`id`),
   UNIQUE KEY `user_id` (`user_id`),
   CONSTRAINT `freelancer_profiles_ibfk_1` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE
@@ -167,4 +169,4 @@ CREATE TABLE `users` (
 /*!40101 SET COLLATION_CONNECTION=@OLD_COLLATION_CONNECTION */;
 /*!40111 SET SQL_NOTES=@OLD_SQL_NOTES */;
 
--- Dump completed on 2026-07-06 11:20:37
+-- Dump completed on 2026-07-08  8:49:26

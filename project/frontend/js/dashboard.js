@@ -35,6 +35,7 @@ function renderSidebarProfile() {
     const pct = Math.round(fields.filter(Boolean).length / fields.length * 100);
     document.getElementById('profile-completeness-pct').textContent = pct + '%';
     document.getElementById('profile-completeness-bar').style.width = pct + '%';
+    document.getElementById('stat-connects').textContent = currentUser.connects_balance ?? '—';
   }
 }
 
@@ -79,6 +80,7 @@ function offerCardClient(o) {
           ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
         </div>
         <div class="d-flex gap-2">
+          <a class="btn btn-sm btn-outline-primary" href="offer.html?id=${o.id}">Заявки${o.bid_count ? ` (${o.bid_count})` : ''}</a>
           <button class="btn btn-sm btn-outline-secondary" onclick="editOffer(${o.id})">Редактировать</button>
           <button class="btn btn-sm btn-outline-danger" onclick="closeOffer(${o.id})">Закрыть</button>
         </div>
@@ -188,23 +190,35 @@ function offerCardFreelancer(o, alreadyBid) {
         </div>
         ${alreadyBid
           ? `<span class="badge bg-success">✓ Заявка подана</span>`
-          : `<button class="btn btn-sm btn-outline-primary" onclick="placeBid(${o.id}, this)">Подать заявку</button>`
+          : `<button class="btn btn-sm btn-outline-primary" onclick="openBidModal(${o.id})">Подать заявку</button>`
         }
       </div>
     </div>`;
 }
 
-async function placeBid(offerId, btn) {
-  btn.disabled = true;
-  btn.textContent = '...';
+function openBidModal(offerId) {
+  document.getElementById('bid-offer-id').value = offerId;
+  document.getElementById('bid-connects').value = 10;
+  document.getElementById('bid-balance').textContent = currentUser.connects_balance ?? 0;
+  hideError('bid-error');
+  new bootstrap.Modal(document.getElementById('bidModal')).show();
+}
+
+async function submitBid() {
+  const offerId  = Number(val('bid-offer-id'));
+  const connects = Number(val('bid-connects'));
+  hideError('bid-error');
+  if (!connects || connects < 10) return showError('bid-error', 'Минимальная ставка — 10 коннектов');
+
   try {
-    await apiPost('/bids.php', { offer_id: offerId });
-    btn.outerHTML = `<span class="badge bg-success">✓ Заявка подана</span>`;
-    const stat = document.getElementById('stat-my-bids');
-    stat.textContent = (parseInt(stat.textContent) || 0) + 1;
+    const res = await apiPost('/bids.php', { offer_id: offerId, connects });
+    bootstrap.Modal.getInstance(document.getElementById('bidModal')).hide();
+
+    currentUser.connects_balance = res.connects_balance;
+    document.getElementById('stat-connects').textContent = res.connects_balance;
+
+    loadFreelancerDashboard();
   } catch (e) {
-    btn.disabled = false;
-    btn.textContent = 'Подать заявку';
-    alert(e.message);
+    showError('bid-error', e.message);
   }
 }

@@ -24,7 +24,8 @@ NovaBuild — Context File
     auth.php            — регистрация + логин + email-верификация (action: register|login|verify_email|resend_code)
     me.php              — GET текущего юзера + профиль по токену
     offers.php          — GET список офферов / POST создать / PUT редактировать-закрыть (владелец)
-    bids.php            — GET мои заявки / POST подать заявку
+    bids.php            — GET мои заявки (freelancer) / список заявок на оффер с ранжированием (client)
+                          POST подать заявку со ставкой коннектов
     profile.php         — POST обновить профиль (поля зависят от роли: client/freelancer/admin)
     avatar.php          — POST multipart-загрузка аватара (любая роль), резайз через GD до 200×200
     verification.php    — POST заявка на верификацию (client/freelancer), multipart-загрузка PDF/PNG/JPEG
@@ -51,6 +52,7 @@ NovaBuild — Context File
       cabinet.html        — личный кабинет (client/freelancer/admin — поля разные), аватар, верификация
       dashboard.html       — рабочий дашборд (офферы клиента / лента фрилансера); редиректит admin → admin.html
       admin.html           — админка: список юзеров + заявки на верификацию (навигация в сайдбаре справа)
+      offer.html            — client-only: детали оффера + ранжированный список заявок фрилансеров
     /js
       common.js           — apiFetch/apiPost/apiPut (кидают Error с полными полями ответа, не только .message),
                             esc/val/initials/displayName/avatarUrl/renderAvatarEl/roleBadgeHtml/timeAgo,
@@ -59,8 +61,9 @@ NovaBuild — Context File
       auth.js             — doLogin() (редирект admin→admin.html по res.role), doRegister(), selectRole()
       verify.js            — doVerify(), doResend() — работают с localStorage.pending_email
       cabinet.js           — профиль (все 3 роли), загрузка аватара, подача заявки на верификацию
-      dashboard.js         — офферы клиента, лента фрилансера (+ бейдж/компания клиента), ставки
+      dashboard.js         — офферы клиента, лента фрилансера (+ бейдж/компания клиента), модалка ставки
       admin.js             — список юзеров, заявки на верификацию, approve/reject, просмотр документа
+      offer.js              — загрузка оффера + ранжированного списка заявок (bidCard())
     /css
       common.css, auth.css, cabinet.css, dashboard.css, admin.css — по файлу на страницу + общий
 
@@ -217,6 +220,36 @@ Email-верификация при регистрации (код на почт
   (vitotestinovich@gmail.com, ragul21412@gmail.com + пара офферов с нецензурными тестовыми
   заголовками) сохранены как есть при миграции — не мои, трогать не стал.
 
+Ставки коннектами (принцип Upwork Connects) — 2026-07-08
+
+  У каждого фрилансера есть баланс коннектов (freelancer_profiles.connects_balance, стартует с 10000 —
+  чисто демо-число, никакой монетизации/докупки коннектов не делали, это не спрашивали). Подача заявки
+  на оффер (POST /api/bids.php) требует ставку от 10 коннектов (MIN_CONNECTS в bids.php) — можно
+  поставить и больше, чтобы подняться в списке у клиента. Ставка списывается с баланса сразу и
+  безвозвратно (INSERT в bids + UPDATE баланса — в одной транзакции $db->beginTransaction()/commit()/
+  rollBack(), чтобы не списать коннекты без реально созданной заявки при сбое). Тело POST: {offer_id,
+  connects, cover_note?} — если connects меньше 10 или больше текущего баланса, 422 с понятной ошибкой.
+
+  Ранжирование для клиента: GET /api/bids.php?offer_id=N (role=client, только владелец оффера — иначе
+  404) отдаёт список заявок ORDER BY connects_spent DESC, created_at ASC, дальше в PHP: первые 5 строк
+  остаются как есть (топ по ставке), array_slice() от 6-й и дальше — shuffle() (перемешивается заново
+  на каждый запрос, стабильного seed'а нет). Протестировано вручную через curl с 7 заявками — топ-5
+  стабильно по убыванию ставки, 6-е и 7-е места реально меняются местами от запроса к запросу.
+
+  Наконец-то реальный consumer для маскировки фамилии фрилансера, о котором в прошлой сессии писали
+  "применять негде": в этом же GET-ответе last_name режется до "Фамилия" → "Ф." (mb_substr до 1 символа
+  + точка) — это ровно тот случай, когда клиент (не админ) смотрит чужой профиль фрилансера.
+
+  Фронтенд: dashboard.html/js — кнопка "Подать заявку" у фрилансера открывает bidModal (вместо прямого
+  POST одним кликом) с полем ставки (default 10, min 10) и текущим балансом; после успеха баланс и
+  статы обновляются на лету. В сайдбаре фрилансера — статья "Коннектов: N". У клиента на карточке
+  оффера — ссылка "Заявки (N)" → pages/offer.html?id=N (это и есть "Детальная страница оффера" из
+  прошлого бэклога, реализована здесь заодно, т.к. без неё ранжирование негде было бы показывать).
+  offer.html/offer.js: сводка оффера + список заявок карточками (ранг #1-#5 синим бейджем, дальше —
+  серым), аватар/имя+инициал фамилии/бейдж верификации/специализация/ставка/cover_note/время подачи.
+  Принятие/отклонение конкретной заявки клиентом — НЕ реализовано в этом заходе (bids.status остаётся
+  pending всегда, ENUM accepted/rejected пока не используется) — separate scope, не просили в этот раз.
+
 База данных — 6 таблиц
 
 sqlusers                  — id, email (он же логин админа), password_hash, role ENUM(client|freelancer|admin),
@@ -224,12 +257,13 @@ sqlusers                  — id, email (он же логин админа), pas
                          verification_status ENUM(none|pending|verified|rejected), verification_doc_path,
                          verified_at, email_verified_at, verification_code, verification_code_expires_at,
                          created_at, updated_at
-freelancer_profiles    — id, user_id FK, phone, website, specialization, about (до 3000 символов)
+freelancer_profiles    — id, user_id FK, phone, website, specialization, about (до 3000 символов),
+                         connects_balance INT DEFAULT 10000
 client_profiles        — id, user_id FK, company_name (опционально), phone
 offers                 — id, client_id FK→client_profiles, title, description,
                          budget DECIMAL, deadline DATE, status ENUM(open|in_progress|closed), created_at
 bids                   — id, offer_id FK, freelancer_id FK→freelancer_profiles, cover_note,
-                         status ENUM(pending|accepted|rejected), created_at
+                         connects_spent INT DEFAULT 10, status ENUM(pending|accepted|rejected), created_at
                          UNIQUE KEY (offer_id, freelancer_id)
 notifications          — id, user_id FK ON DELETE CASCADE, type, message, is_read, created_at
 
@@ -268,8 +302,9 @@ pages/dashboard.html — рабочий дашборд: клиент видит 
 Что НЕ сделано (следующие таски)
 
 
- Детальная страница оффера + список заявок на него (когда появится — заодно реализовать маскировку
-   фамилии фрилансера "Иван И." для чужих, см. раздел про личные кабинеты выше)
+ Принятие/отклонение конкретной заявки клиентом (bids.status accepted|rejected сейчас не используется,
+   см. раздел "Ставки коннектами" выше — офферы.php/оффер.html показывают заявки, но выбрать
+   исполнителя пока нельзя)
  Чат между заказчиком и фрилансером
  Платежи / эскроу
 
