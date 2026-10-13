@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Чат — NovaBuild</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="../css/common.css?v=18">
-  <link rel="stylesheet" href="../css/chat.css?v=18">
+  <link rel="stylesheet" href="../css/common.css?v=20">
+  <link rel="stylesheet" href="../css/chat.css?v=20">
 </head>
 <body>
 
@@ -56,9 +56,13 @@
       <div id="messages-list" class="chat-messages mb-3"></div>
 
       <form class="d-flex gap-2" onsubmit="sendMessage(event)">
+        <label class="btn btn-outline-secondary mb-0" title="Прикрепить фото или документ (png/jpg/pdf/docx/xlsx, до 15 МБ)">
+          📎<input type="file" id="message-files" multiple accept=".png,.jpg,.jpeg,.pdf,.docx,.xlsx" hidden onchange="onChatFilesChange()">
+        </label>
         <input type="text" class="form-control" id="message-input" placeholder="Написать сообщение..." maxlength="5000" autocomplete="off">
-        <button class="btn btn-primary" type="submit">Отправить</button>
+        <button class="btn btn-primary" type="submit" id="message-send-btn">Отправить</button>
       </form>
+      <div id="message-files-preview" class="small mt-1"></div>
 
     </div>
 
@@ -119,22 +123,7 @@
           <label class="form-label" id="propose-deadline-label">Срок <span class="text-muted small">(опционально)</span></label>
           <input type="date" class="form-control" id="propose-deadline">
         </div>
-
-        <div class="mb-2">
-          <label class="form-label d-block">Материалы покупает <span class="text-muted small">(пока не влияет на расчёты)</span></label>
-          <div class="form-check">
-            <input class="form-check-input" type="radio" name="propose-materials" id="propose-mat-reserve" value="exchange_reserve" checked>
-            <label class="form-check-label" for="propose-mat-reserve">Резерв биржи — деньги по смете бронирует биржа, выплата фрилансеру после закупки</label>
-          </div>
-          <div class="form-check">
-            <input class="form-check-input" type="radio" name="propose-materials" id="propose-mat-client" value="client">
-            <label class="form-check-label" for="propose-mat-client">Оплачивает заказчик</label>
-          </div>
-          <div class="form-check">
-            <input class="form-check-input" type="radio" name="propose-materials" id="propose-mat-service" value="exchange_service">
-            <label class="form-check-label" for="propose-mat-service">Закупка силами биржи</label>
-          </div>
-        </div>
+        <div class="form-text">Материалы закупает заказчик самостоятельно.</div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -206,10 +195,16 @@
         <p class="text-muted small">Демо-режим: реальный платёж не выполняется, сумма зачисляется в эскроу сразу. Деньги хранятся на бирже до закрытия контракта.</p>
         <div class="mb-3">
           <label class="form-label">Сумма, ₴</label>
-          <input type="number" class="form-control" id="deposit-amount" min="10">
+          <input type="number" class="form-control" id="deposit-amount" min="10" oninput="cmRenderDepositSplit()">
           <div class="form-text" id="deposit-remaining-hint"></div>
         </div>
 
+        <!-- balance-first split: filled by contract-actions.js cmRenderDepositSplit() -->
+        <div id="deposit-split" class="border rounded p-2 mb-3 small" style="display:none"></div>
+        <div class="alert alert-info small py-2 mb-3" id="deposit-withdraw-notice"></div>
+        <button class="btn btn-success w-100 mb-2" id="deposit-balance-only-btn" style="display:none" onclick="cmSubmitDeposit('')">Оплатить с баланса на сайте</button>
+
+        <div id="deposit-methods">
         <ul class="nav nav-tabs mb-3">
           <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dep-card" type="button">💳 Карта</button></li>
           <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dep-gpay" type="button">Ⓖ Google Pay</button></li>
@@ -248,6 +243,7 @@
             <button class="btn btn-warning" onclick="cmSubmitDeposit('liqpay')">🟡 Оплатить через LiqPay</button>
           </div>
         </div>
+        </div><!-- /deposit-methods -->
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
@@ -277,14 +273,6 @@
         <div class="mb-3">
           <label class="form-label">Срок <span class="text-muted small">(опционально)</span></label>
           <input type="date" class="form-control" id="stage-deadline">
-        </div>
-        <div class="mb-2">
-          <label class="form-label">Материалы покупает <span class="text-muted small">(пока не влияет на расчёты)</span></label>
-          <select class="form-select" id="stage-materials">
-            <option value="exchange_reserve">Резерв биржи</option>
-            <option value="client">Оплачивает заказчик</option>
-            <option value="exchange_service">Закупка силами биржи</option>
-          </select>
         </div>
       </div>
       <div class="modal-footer">
@@ -360,10 +348,19 @@
   </div>
 </div>
 
+<!-- ── FULLSCREEN IMAGE GALLERY (common.js openGallery) ─────────────────── -->
+<div id="image-gallery-overlay" class="align-items-center justify-content-center" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:1090;">
+  <button type="button" class="btn btn-light position-absolute" style="top:20px; right:20px;" onclick="closeGallery()">✕ Закрыть</button>
+  <button type="button" id="gallery-prev" class="btn btn-light position-absolute" style="left:20px; top:50%; transform:translateY(-50%);" onclick="galleryStep(-1)">‹</button>
+  <img id="gallery-image" style="max-width:90vw; max-height:85vh; object-fit:contain;">
+  <button type="button" id="gallery-next" class="btn btn-light position-absolute" style="right:20px; top:50%; transform:translateY(-50%);" onclick="galleryStep(1)">›</button>
+  <div id="gallery-counter" class="text-white position-absolute" style="bottom:20px; left:50%; transform:translateX(-50%);"></div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://js.pusher.com/8.4/pusher.min.js"></script>
-<script src="../js/common.js?v=18"></script>
-<script src="../js/contract-actions.js?v=18"></script>
-<script src="../js/chat.js?v=18"></script>
+<script src="../js/common.js?v=20"></script>
+<script src="../js/contract-actions.js?v=20"></script>
+<script src="../js/chat.js?v=20"></script>
 </body>
 </html>

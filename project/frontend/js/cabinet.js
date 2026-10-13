@@ -58,10 +58,11 @@ function renderBalanceBlock() {
   if (role === 'client') {
     const frozen = currentUser.frozen_amount || 0;
     document.getElementById('balance-amount').textContent = formatUAH(currentUser.balance);
-    hint.textContent = frozen > 0
-      ? `Из них ${formatUAH(frozen)} заморожено (депозит по незавершённому контракту) — недоступно для новых депозитов.`
-      : 'Пополняется автоматически, если контракт закрыт как невыполненный — депозит возвращается сюда.';
-    action.innerHTML = '';
+    hint.textContent = (frozen > 0
+      ? `Из них ${formatUAH(frozen)} заморожено (возврат по невыполненному контракту, 7 дней на спор) — пока недоступно. `
+      : 'Пополняется автоматически, если контракт закрыт как невыполненный — депозит возвращается сюда. ')
+      + 'При оплате следующего контракта сначала списывается доступный баланс, остаток — картой.';
+    action.innerHTML = `<div class="alert alert-info small py-2 mb-0" style="max-width:360px">ℹ️ ${esc(CLIENT_WITHDRAW_NOTICE)}</div>`;
   } else {
     document.getElementById('balance-amount').textContent = formatUAH(currentUser.balance);
     hint.textContent = 'Зачисляется автоматически, когда клиент закрывает контракт как выполненный.';

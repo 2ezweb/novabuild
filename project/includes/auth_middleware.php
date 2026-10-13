@@ -1,5 +1,6 @@
 <?php
 require_once __DIR__ . '/jwt.php';
+require_once __DIR__ . '/db.php';
 
 // Apache (common under OSPanel/OpenServer) often does not forward the
 // Authorization header into $_SERVER['HTTP_AUTHORIZATION'] by default.
@@ -36,6 +37,23 @@ function require_auth(): array {
     if (!$payload) {
         http_response_code(401);
         echo json_encode(['error' => 'Invalid or expired token']);
+        exit;
+    }
+
+    // A JWT lives 7 days — a ban (admin.php set_user_status) must also cut off
+    // tokens issued before it, so the status is re-read on every request.
+    // Deleted user → 401 as well.
+    $stmt = get_db()->prepare('SELECT status FROM users WHERE id = ?');
+    $stmt->execute([(int)$payload['user_id']]);
+    $status = $stmt->fetchColumn();
+    if ($status === false) {
+        http_response_code(401);
+        echo json_encode(['error' => 'Unauthorized']);
+        exit;
+    }
+    if ($status === 'banned') {
+        http_response_code(403);
+        echo json_encode(['error' => 'Аккаунт заблокирован. Обратитесь в поддержку.', 'banned' => true]);
         exit;
     }
     return $payload;

@@ -56,4 +56,9 @@ if (!$user) {
     exit;
 }
 
+// What escrow.php will actually take from the balance before charging the card.
+if ($me['role'] === 'client') {
+    $user['available_balance'] = round(max(0, (float)$user['balance'] - (float)$user['frozen_amount']), 2);
+}
+
 echo json_encode($user);

@@ -11,6 +11,7 @@ require_once __DIR__ . '/../includes/auth_middleware.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/contract_number.php';
 require_once __DIR__ . '/../includes/contract_payouts.php';
+require_once __DIR__ . '/../includes/dates.php';
 
 $me = require_admin();
 $db = get_db();
@@ -139,6 +140,30 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $stmt->execute([$contract['conversation_id']]);
         $messages = $stmt->fetchAll();
 
+        // Chat files and work hand-overs are evidence too.
+        $attStmt = $db->prepare('
+            SELECT ma.message_id, ma.file_path, ma.original_name, ma.mime_type, ma.size
+            FROM message_attachments ma
+            JOIN messages m ON m.id = ma.message_id
+            WHERE m.conversation_id = ?
+            ORDER BY ma.id
+        ');
+        $attStmt->execute([$contract['conversation_id']]);
+        $attByMessage = [];
+        foreach ($attStmt->fetchAll() as $a) $attByMessage[(int)$a['message_id']][] = $a;
+        foreach ($messages as &$m) $m['attachments'] = $attByMessage[(int)$m['id']] ?? [];
+        unset($m);
+
+        $stmt = $db->prepare('SELECT * FROM work_submissions WHERE contract_id = ? ORDER BY id DESC');
+        $stmt->execute([$escalation['contract_id']]);
+        $submissions = $stmt->fetchAll();
+        $fileStmt = $db->prepare('SELECT file_path, original_name, mime_type, size FROM work_submission_files WHERE submission_id = ? ORDER BY id');
+        foreach ($submissions as &$s) {
+            $fileStmt->execute([$s['id']]);
+            $s['files'] = $fileStmt->fetchAll();
+        }
+        unset($s);
+
         $stmt = $db->prepare('SELECT * FROM contract_estimates WHERE contract_id = ? ORDER BY id DESC');
         $stmt->execute([$escalation['contract_id']]);
         $estimates = $stmt->fetchAll();
@@ -154,8 +179,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         echo json_encode([
             'escalation' => $escalation,
             'contract'   => $contract,
-            'messages'   => $messages,
-            'estimates'  => $estimates,
+            'messages'    => $messages,
+            'estimates'   => $estimates,
+            'submissions' => $submissions,
         ]);
         exit;
     }
@@ -246,8 +272,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             ")->execute([$hold['freelancer_user_id'], $hold['amount'], $hold['contract_id']]);
         }
 
+        // The API speaks to_client|to_freelancer; the balance_holds.resolution ENUM
+        // stores released_to_client|released_to_freelancer.
         $db->prepare("UPDATE balance_holds SET resolution = ? WHERE id = ?")
-           ->execute([$resolution, $holdId]);
+           ->execute(['released_' . $resolution, $holdId]);
 
         $db->commit();
 
@@ -317,7 +345,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if ($resolution === 'terms_changed') {
             $newPrice    = isset($body['new_price']) && is_numeric($body['new_price']) ? (float) $body['new_price'] : null;
-            $newDeadline = array_key_exists('new_deadline', $body) && $body['new_deadline'] !== '' ? $body['new_deadline'] : null;
+            $newDeadline = validate_deadline($body['new_deadline'] ?? null, 'Новый срок');
             if ($newPrice === null && $newDeadline === null) {
                 http_response_code(422);
                 echo json_encode(['error' => 'Укажите новую цену и/или срок']);
@@ -340,11 +368,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->beginTransaction();
             if ($resolution === 'closed_success') {
                 pay_freelancer($db, $contract);
+                settle_pending_submissions($db, (int)$contract['id'], true);
                 $db->prepare("UPDATE contracts SET status = 'completed', escrowed_amount = 0, frozen_at = NULL WHERE id = ?")
                    ->execute([$contract['id']]);
                 $message = "Администрация закрыла $noun #$number как выполненный, оплата переведена фрилансеру.";
             } else {
                 refund_with_hold($db, $contract);
+                settle_pending_submissions($db, (int)$contract['id'], false);
                 $db->prepare("UPDATE contracts SET status = 'failed', escrowed_amount = 0, frozen_at = NULL WHERE id = ?")
                    ->execute([$contract['id']]);
                 $message = "Администрация закрыла $noun #$number как невыполненный, депозит возвращён клиенту (с холдом на " . CONTRACT_HOLD_DAYS . ' дней).';
@@ -417,6 +447,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$userId) {
         http_response_code(422);
         echo json_encode(['error' => 'user_id is required']);
+        exit;
+    }
+
+    // Ban / unban. Takes effect immediately, including already-issued tokens
+    // (auth_middleware.php re-reads users.status on every request). Admins
+    // can't be banned from here — no locking yourself (or a colleague) out.
+    if ($action === 'set_user_status') {
+        $newStatus = $body['status'] ?? '';
+        if (!in_array($newStatus, ['active', 'banned'], true)) {
+            http_response_code(422);
+            echo json_encode(['error' => 'status: active|banned']);
+            exit;
+        }
+        $stmt = $db->prepare('SELECT role, status FROM users WHERE id = ?');
+        $stmt->execute([$userId]);
+        $target = $stmt->fetch();
+        if (!$target) {
+            http_response_code(404);
+            echo json_encode(['error' => 'User not found']);
+            exit;
+        }
+        if ($target['role'] === 'admin') {
+            http_response_code(409);
+            echo json_encode(['error' => 'Администратора заблокировать нельзя']);
+            exit;
+        }
+        $db->prepare('UPDATE users SET status = ? WHERE id = ?')->execute([$newStatus, $userId]);
+        if ($newStatus === 'active' && $target['status'] === 'banned') {
+            create_notification($db, $userId, 'account_unbanned', 'Ваш аккаунт разблокирован.');
+        }
+        echo json_encode(['success' => true, 'status' => $newStatus]);
         exit;
     }
 

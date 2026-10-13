@@ -158,12 +158,16 @@ function fileIcon(mime) {
 
 // Renders image attachments as a thumbnail grid (click opens the fullscreen gallery)
 // and everything else as downloadable file rows. Shared by the offer detail modal and offer.html.
+// Pages using it need the #image-gallery-overlay markup.
 function renderAttachments(container, attachments) {
-  if (!attachments.length) {
-    container.innerHTML = '<p class="text-muted small mb-0">Файлов нет.</p>';
-    return;
-  }
+  container.innerHTML = attachments.length
+    ? attachmentsHtml(attachments)
+    : '<p class="text-muted small mb-0">Файлов нет.</p>';
+}
 
+// Same, as an HTML string — for templates (work hand-over, chat bubbles). '' when empty.
+function attachmentsHtml(attachments) {
+  if (!attachments || !attachments.length) return '';
   const images = attachments.filter(a => a.mime_type.startsWith('image/'));
   const files  = attachments.filter(a => !a.mime_type.startsWith('image/'));
   const imageUrls = images.map(a => assetUrl(a.file_path));
@@ -181,7 +185,26 @@ function renderAttachments(container, attachments) {
         ${fileIcon(a.mime_type)} ${esc(a.original_name)} <span class="text-muted">(${formatFileSize(a.size)})</span>
       </a>`).join('') + '</div>';
   }
-  container.innerHTML = html;
+  return html;
+}
+
+// Upload whitelist mirror of includes/uploads.php — for the `accept` attribute
+// and a friendly client-side check before sending.
+const UPLOAD_ACCEPT = '.png,.jpg,.jpeg,.pdf,.docx,.xlsx';
+const UPLOAD_MAX_FILE_MB = 15;
+const UPLOAD_MAX_FILES_COUNT = 10;
+
+// Returns an error message, or null when the selection is OK.
+function checkUploadSelection(fileList) {
+  const files = Array.from(fileList || []);
+  if (files.length > UPLOAD_MAX_FILES_COUNT) return `Не больше ${UPLOAD_MAX_FILES_COUNT} файлов за раз`;
+  const allowed = UPLOAD_ACCEPT.split(',');
+  for (const f of files) {
+    const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
+    if (!allowed.includes(ext)) return `«${f.name}»: допустимы только png/jpg/pdf/docx/xlsx`;
+    if (f.size > UPLOAD_MAX_FILE_MB * 1024 * 1024) return `«${f.name}» больше ${UPLOAD_MAX_FILE_MB} МБ`;
+  }
+  return null;
 }
 
 // ─── FULLSCREEN IMAGE GALLERY ─────────────────────────────────────────────────
@@ -250,9 +273,10 @@ async function requireAuth() {
 
     initNotificationBell();
     return me;
-  } catch {
+  } catch (e) {
     localStorage.removeItem('token');
-    location.href = 'login.html';
+    // auth_middleware.php answers {banned: true} when an admin blocked the account
+    location.href = e.banned ? 'login.html?banned=1' : 'login.html';
     return new Promise(() => {});
   }
 }
@@ -332,6 +356,50 @@ function setupCabinetTabs(me) {
   const connectsTab = document.getElementById('tab-connects-item');
   if (connectsTab) connectsTab.style.display = me.role === 'freelancer' ? '' : 'none';
 }
+
+// ─── DATE INPUT BOUNDS ────────────────────────────────────────────────────────
+// Every <input type="date"> on the site is a deadline: today … today + 15 years.
+// Mirrors includes/dates.php (DEADLINE_MAX_YEARS) — the server is the real
+// check, this only keeps the picker from offering nonsense. Applied on load and
+// lazily on focus, so inputs rendered later (admin escalation form) get it too.
+const DEADLINE_MAX_YEARS = 15;
+
+function isoLocalDate(d) {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+function applyDateBounds(input) {
+  const today = new Date();
+  const max = new Date(today);
+  max.setFullYear(max.getFullYear() + DEADLINE_MAX_YEARS);
+  input.min = isoLocalDate(today);
+  input.max = isoLocalDate(max);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('input[type="date"]').forEach(applyDateBounds);
+});
+document.addEventListener('focusin', (e) => {
+  if (e.target.matches?.('input[type="date"]')) applyDateBounds(e.target);
+});
+
+// ─── RATING (reviews.php / freelancer_profile.php / bids.php) ────────────────
+function starsHtml(rating) {
+  const r = Math.round(Number(rating) || 0);
+  return `<span class="text-warning" title="${r} из 5">${'★'.repeat(r)}</span><span class="text-muted">${'☆'.repeat(5 - r)}</span>`;
+}
+
+// Compact "★ 4.7 (12)" badge; "нет отзывов" when count is 0.
+function ratingBadgeHtml(avg, count) {
+  count = Number(count) || 0;
+  if (!count) return '<span class="text-muted small">нет отзывов</span>';
+  const a = Number(avg).toLocaleString('uk-UA', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  return `<span class="small"><span class="text-warning">★</span> ${a} <span class="text-muted">(${count})</span></span>`;
+}
+
+// Client balance can't be withdrawn by the client — shown in the deposit modal,
+// cabinet balance block and dashboard sidebar.
+const CLIENT_WITHDRAW_NOTICE = 'Вывод денег для клиента возможно осуществить только с помощью технической поддержки. Обратитесь в поддержку если у Вас возникли проблемы.';
 
 function formatUAH(n) {
   return '₴ ' + Number(n || 0).toLocaleString('uk-UA');

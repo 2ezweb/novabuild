@@ -52,4 +52,27 @@ if (!$freelancer) {
 $freelancer['last_name_initial'] = $freelancer['last_name'] ? mb_substr($freelancer['last_name'], 0, 1) . '.' : null;
 unset($freelancer['last_name']);
 
+// Rating + work stats (reviews.php) and the latest reviews. Reviewer is shown
+// by first name only — same peer-masking idea as above.
+$stmt = $db->prepare('SELECT ROUND(AVG(rating), 1) AS avg, COUNT(*) AS cnt FROM reviews WHERE freelancer_user_id = ?');
+$stmt->execute([$userId]);
+$agg = $stmt->fetch();
+$freelancer['rating_avg']   = $agg['cnt'] ? (float) $agg['avg'] : null;
+$freelancer['rating_count'] = (int) $agg['cnt'];
+
+$stmt = $db->prepare("SELECT COUNT(*) FROM contracts WHERE freelancer_user_id = ? AND parent_contract_id IS NULL AND status = 'completed'");
+$stmt->execute([$userId]);
+$freelancer['completed_contracts'] = (int) $stmt->fetchColumn();
+
+$stmt = $db->prepare('
+    SELECT r.rating, r.comment, r.created_at, u.first_name AS client_first_name
+    FROM reviews r
+    JOIN users u ON u.id = r.client_user_id
+    WHERE r.freelancer_user_id = ?
+    ORDER BY r.id DESC
+    LIMIT 20
+');
+$stmt->execute([$userId]);
+$freelancer['reviews'] = $stmt->fetchAll();
+
 echo json_encode($freelancer);

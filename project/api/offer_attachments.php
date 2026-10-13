@@ -8,20 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth_middleware.php';
-
-const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB
-
-// extension => list of MIME types finfo may legitimately report for it.
-// docx/xlsx are zip containers — finfo very commonly reports them as plain
-// application/zip, so that's accepted too and double-checked with ZipArchive below.
-const ALLOWED_TYPES = [
-    'png'  => ['image/png'],
-    'jpg'  => ['image/jpeg'],
-    'jpeg' => ['image/jpeg'],
-    'pdf'  => ['application/pdf'],
-    'docx' => ['application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/zip'],
-    'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'],
-];
+require_once __DIR__ . '/../includes/uploads.php';
 
 $me = require_auth();
 $db = get_db();
@@ -75,62 +62,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    $files  = $_FILES['files'];
-    $count  = is_array($files['name']) ? count($files['name']) : 0;
-    $saved  = [];
-    $finfo  = finfo_open(FILEINFO_MIME_TYPE);
-
-    for ($i = 0; $i < $count; $i++) {
-        if ($files['error'][$i] !== UPLOAD_ERR_OK) continue;
-
-        $originalName = $files['name'][$i];
-        $tmpPath      = $files['tmp_name'][$i];
-        $size         = (int) $files['size'][$i];
-        $ext          = strtolower(pathinfo($originalName, PATHINFO_EXTENSION));
-
-        if (!isset(ALLOWED_TYPES[$ext])) {
-            continue; // silently skip unsupported files, reported back as not-saved
-        }
-        if ($size > MAX_FILE_SIZE) {
-            continue;
-        }
-
-        $mime = finfo_file($finfo, $tmpPath);
-        if (!in_array($mime, ALLOWED_TYPES[$ext], true)) {
-            continue;
-        }
-        // docx/xlsx are OOXML zip packages — confirm it's actually a valid zip,
-        // not just an arbitrary file renamed to dodge the extension check.
-        if (in_array($ext, ['docx', 'xlsx'], true)) {
-            $zip = new ZipArchive();
-            if ($zip->open($tmpPath) !== true) continue;
-            $zip->close();
-        }
-
-        $filename = bin2hex(random_bytes(16)) . '.' . $ext;
-        $destPath = __DIR__ . '/../uploads/offers/' . $filename;
-        if (!move_uploaded_file($tmpPath, $destPath)) continue;
-
-        $relativePath = 'uploads/offers/' . $filename;
-        $stmt = $db->prepare('
-            INSERT INTO offer_attachments (offer_id, file_path, original_name, mime_type, size)
-            VALUES (?, ?, ?, ?, ?)
-        ');
-        $stmt->execute([$offer_id, $relativePath, $originalName, $mime, $size]);
-
-        $saved[] = [
-            'id'            => (int) $db->lastInsertId(),
-            'file_path'     => $relativePath,
-            'original_name' => $originalName,
-            'mime_type'     => $mime,
-            'size'          => $size,
-        ];
+    $files = store_uploaded_files($_FILES['files'], 'offers');
+    if (!$files) {
+        http_response_code(422);
+        echo json_encode(['error' => 'Не удалось сохранить файлы — проверьте формат (' . UPLOAD_FORMATS_HINT . ')']);
+        exit;
     }
 
-    if (!$saved) {
-        http_response_code(422);
-        echo json_encode(['error' => 'Не удалось сохранить файлы — проверьте формат (png/jpg/pdf/docx/xlsx) и размер (до 15МБ)']);
-        exit;
+    $saved = [];
+    $stmt  = $db->prepare('
+        INSERT INTO offer_attachments (offer_id, file_path, original_name, mime_type, size)
+        VALUES (?, ?, ?, ?, ?)
+    ');
+    foreach ($files as $f) {
+        $stmt->execute([$offer_id, $f['file_path'], $f['original_name'], $f['mime_type'], $f['size']]);
+        $saved[] = ['id' => (int) $db->lastInsertId()] + $f;
     }
 
     http_response_code(201);

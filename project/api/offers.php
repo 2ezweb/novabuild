@@ -8,6 +8,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth_middleware.php';
+require_once __DIR__ . '/../includes/dates.php';
 
 // How long an offer stays visible (with the "Уже найден работник" badge) to
 // other freelancers after a contract for it goes active — see
@@ -88,7 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $title = trim($body['title'] ?? '');
     $desc  = trim($body['description'] ?? '');
     $budget   = is_numeric($body['budget'] ?? '') ? (float)$body['budget'] : null;
-    $deadline = !empty($body['deadline']) ? $body['deadline'] : null;
+    $deadline = validate_deadline($body['deadline'] ?? null);
 
     if (!$title) {
         http_response_code(422);
@@ -170,7 +171,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     }
     if (array_key_exists('deadline', $body)) {
         $fields[] = 'deadline = ?';
-        $params[] = !empty($body['deadline']) ? $body['deadline'] : null;
+        $params[] = validate_deadline($body['deadline']);
     }
     if (array_key_exists('status', $body)) {
         if (!in_array($body['status'], ['open', 'in_progress', 'closed'], true)) {

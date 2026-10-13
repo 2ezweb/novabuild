@@ -11,9 +11,9 @@ require_once __DIR__ . '/../includes/auth_middleware.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/contract_number.php';
 require_once __DIR__ . '/../includes/contract_payouts.php';
+require_once __DIR__ . '/../includes/dates.php';
 
 const FREELANCER_CLOSE_SILENCE_DAYS = 14;
-const MATERIALS_OPTIONS = ['exchange_reserve', 'client', 'exchange_service'];
 
 $me = require_auth();
 $db = get_db();
@@ -118,9 +118,8 @@ if ($action === 'propose') {
     $conversationId = (int) ($body['conversation_id'] ?? 0);
     $type           = ($body['type'] ?? 'full') === 'staged' ? 'staged' : 'full';
     $price          = is_numeric($body['price'] ?? '') ? (float) $body['price'] : 0;
-    $deadline       = !empty($body['deadline']) ? $body['deadline'] : null;
+    $deadline       = validate_deadline($body['deadline'] ?? null);
     $offerId        = !empty($body['offer_id']) ? (int) $body['offer_id'] : null;
-    $materials      = in_array($body['materials_paid_by'] ?? '', MATERIALS_OPTIONS, true) ? $body['materials_paid_by'] : null;
     $stageTitle     = trim($body['stage_title'] ?? '');
 
     if ($price <= 0) {
@@ -167,10 +166,10 @@ if ($action === 'propose') {
 
     if ($type === 'full') {
         $stmt = $db->prepare('
-            INSERT INTO contracts (conversation_id, client_user_id, freelancer_user_id, offer_id, type, price, deadline, status, materials_paid_by)
-            VALUES (?, ?, ?, ?, "full", ?, ?, "proposed", ?)
+            INSERT INTO contracts (conversation_id, client_user_id, freelancer_user_id, offer_id, type, price, deadline, status)
+            VALUES (?, ?, ?, ?, "full", ?, ?, "proposed")
         ');
-        $stmt->execute([$conversationId, $me['user_id'], $freelancerId, $offerId, $price, $deadline, $materials]);
+        $stmt->execute([$conversationId, $me['user_id'], $freelancerId, $offerId, $price, $deadline]);
         $contractId = (int) $db->lastInsertId();
     } else {
         $db->beginTransaction();
@@ -182,9 +181,9 @@ if ($action === 'propose') {
         $contractId = (int) $db->lastInsertId();
         // Stage 1.
         $db->prepare('
-            INSERT INTO contracts (conversation_id, client_user_id, freelancer_user_id, parent_contract_id, seq, type, title, price, deadline, status, materials_paid_by)
-            VALUES (?, ?, ?, ?, 1, "full", ?, ?, ?, "proposed", ?)
-        ')->execute([$conversationId, $me['user_id'], $freelancerId, $contractId, $stageTitle, $price, $deadline, $materials]);
+            INSERT INTO contracts (conversation_id, client_user_id, freelancer_user_id, parent_contract_id, seq, type, title, price, deadline, status)
+            VALUES (?, ?, ?, ?, 1, "full", ?, ?, ?, "proposed")
+        ')->execute([$conversationId, $me['user_id'], $freelancerId, $contractId, $stageTitle, $price, $deadline]);
         $db->commit();
     }
 
@@ -220,8 +219,7 @@ if ($action === 'add_stage') {
 
     $title    = trim($body['title'] ?? '');
     $price    = is_numeric($body['price'] ?? '') ? (float) $body['price'] : 0;
-    $deadline = !empty($body['deadline']) ? $body['deadline'] : null;
-    $materials = in_array($body['materials_paid_by'] ?? '', MATERIALS_OPTIONS, true) ? $body['materials_paid_by'] : null;
+    $deadline = validate_deadline($body['deadline'] ?? null, 'Срок этапа');
 
     if ($title === '' || $price <= 0) {
         http_response_code(422);
@@ -241,11 +239,11 @@ if ($action === 'add_stage') {
     $nextSeq = $last ? ((int) $last['seq'] + 1) : 1;
 
     $db->prepare('
-        INSERT INTO contracts (conversation_id, client_user_id, freelancer_user_id, parent_contract_id, seq, type, title, price, deadline, status, materials_paid_by)
-        VALUES (?, ?, ?, ?, ?, "full", ?, ?, ?, "proposed", ?)
+        INSERT INTO contracts (conversation_id, client_user_id, freelancer_user_id, parent_contract_id, seq, type, title, price, deadline, status)
+        VALUES (?, ?, ?, ?, ?, "full", ?, ?, ?, "proposed")
     ')->execute([
         $parent['conversation_id'], $me['user_id'], $parent['freelancer_user_id'],
-        $parentId, $nextSeq, $title, $price, $deadline, $materials,
+        $parentId, $nextSeq, $title, $price, $deadline,
     ]);
     $stageId = (int) $db->lastInsertId();
 
@@ -382,6 +380,7 @@ if ($action === 'close') {
                 $db->prepare("UPDATE contracts SET status = 'rejected' WHERE id = ?")->execute([$stage['id']]);
             } elseif ($stage['status'] === 'active') {
                 refund_with_hold($db, $stage);
+                settle_pending_submissions($db, (int)$stage['id'], false);
                 $db->prepare("UPDATE contracts SET status = 'failed', escrowed_amount = 0 WHERE id = ?")->execute([$stage['id']]);
             }
         }
@@ -389,9 +388,11 @@ if ($action === 'close') {
            ->execute([$outcome === 'success' ? 'completed' : 'failed', $contractId]);
     } elseif ($outcome === 'success') {
         pay_freelancer($db, $contract);
+        settle_pending_submissions($db, $contractId, true);
         $db->prepare("UPDATE contracts SET status = 'completed', escrowed_amount = 0 WHERE id = ?")->execute([$contractId]);
     } else {
         refund_with_hold($db, $contract);
+        settle_pending_submissions($db, $contractId, false);
         $db->prepare("UPDATE contracts SET status = 'failed', escrowed_amount = 0 WHERE id = ?")->execute([$contractId]);
     }
 

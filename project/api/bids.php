@@ -40,7 +40,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $stmt = $db->prepare('
             SELECT b.id, b.cover_note, b.status, b.connects_spent, b.created_at,
                    u.id AS freelancer_user_id, u.first_name, u.last_name, u.avatar_path, u.verification_status,
-                   fp.specialization
+                   fp.specialization,
+                   (SELECT ROUND(AVG(r.rating), 1) FROM reviews r WHERE r.freelancer_user_id = u.id) AS rating_avg,
+                   (SELECT COUNT(*) FROM reviews r WHERE r.freelancer_user_id = u.id) AS rating_count
             FROM bids b
             JOIN freelancer_profiles fp ON fp.id = b.freelancer_id
             JOIN users u ON u.id = fp.user_id

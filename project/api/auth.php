@@ -97,7 +97,7 @@ function handle_login(array $d): void {
     }
 
     if ($user['status'] === 'banned')
-        respond(403, ['error' => 'Account is banned']);
+        respond(403, ['error' => 'Аккаунт заблокирован. Обратитесь в поддержку.']);
 
     if (!$user['email_verified_at'])
         respond(403, ['error' => 'Email не подтверждён', 'pending_verification' => true, 'email' => $email]);

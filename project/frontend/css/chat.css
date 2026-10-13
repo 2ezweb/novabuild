@@ -39,6 +39,14 @@
   border-bottom-left-radius: 2px;
 }
 
+/* Files in a bubble (common.js attachmentsHtml). The bubble is pre-wrap for
+   message text — the attachment markup's own indentation must not show. */
+.chat-bubble .chat-attachments { white-space: normal; }
+.chat-bubble .chat-attachments .attachment-file-link {
+  background: #fff;
+  color: #212529;
+}
+
 .chat-bubble .chat-time {
   display: block;
   font-size: .7rem;

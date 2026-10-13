@@ -14,3 +14,7 @@ project/uploads/verification/*
 !project/uploads/verification/.htaccess
 project/uploads/offers/*
 !project/uploads/offers/.gitkeep
+project/uploads/submissions/*
+!project/uploads/submissions/.gitkeep
+project/uploads/chat/*
+!project/uploads/chat/.gitkeep

@@ -24,6 +24,14 @@ function pay_freelancer(PDO $db, array $row): void {
     ")->execute([$row['freelancer_user_id'], $amount, 'Оплата по контракту #' . contract_number($cid), $cid]);
 }
 
+// A work hand-over still waiting for the client's ДА/НЕТ (work_submissions.php)
+// is settled by any other way the contract/stage gets closed — plain close,
+// staged-parent cascade, admin force-close. Caller owns the transaction.
+function settle_pending_submissions(PDO $db, int $contractId, bool $accepted): void {
+    $db->prepare("UPDATE work_submissions SET status = ?, decided_at = NOW() WHERE contract_id = ? AND status = 'submitted'")
+       ->execute([$accepted ? 'accepted' : 'rejected', $contractId]);
+}
+
 // Refund an active row's escrow to the client + a disputable hold — a normal
 // "close: failure", the staged-parent cascade, or an admin force-close in
 // the client's favor. Caller owns the transaction.

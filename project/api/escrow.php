@@ -10,9 +10,15 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth_middleware.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/contract_number.php';
+require_once __DIR__ . '/../includes/client_balance.php';
 
 // Same demo-stub principle as connects.php: no real payment gateway behind
 // any of the three methods, and card fields are never sent here.
+//
+// Balance first: whatever the client has AVAILABLE on the site balance
+// (client_profiles.balance minus frozen holds, see client_balance.php) is
+// spent first, only the remainder goes to the payment method. If the balance
+// covers everything, method isn't required at all.
 const MIN_DEPOSIT_UAH = 10;
 const MAX_DEPOSIT_UAH = 1000000;
 const PAYMENT_METHODS  = ['card' => 'банковской картой', 'gpay' => 'через Google Pay', 'liqpay' => 'через LiqPay'];
@@ -40,14 +46,7 @@ if ($action !== 'deposit') {
     exit;
 }
 
-$method = $body['method'] ?? '';
-if (!isset(PAYMENT_METHODS[$method])) {
-    http_response_code(422);
-    echo json_encode(['error' => 'Неизвестный способ оплаты']);
-    exit;
-}
-
-$amount = is_numeric($body['amount'] ?? '') ? (float) $body['amount'] : 0;
+$amount = is_numeric($body['amount'] ?? '') ? round((float) $body['amount'], 2) : 0;
 if ($amount < MIN_DEPOSIT_UAH || $amount > MAX_DEPOSIT_UAH) {
     http_response_code(422);
     echo json_encode(['error' => 'Сумма должна быть от ' . MIN_DEPOSIT_UAH . ' до ' . MAX_DEPOSIT_UAH . ' ₴']);
@@ -77,18 +76,51 @@ if ($contract['status'] !== 'active') {
     exit;
 }
 
+$number = contract_number($contractId);
+
 $db->beginTransaction();
+
+// Lock the client's balance row so two parallel deposits can't both spend it.
+$db->prepare('SELECT balance FROM client_profiles WHERE user_id = ? FOR UPDATE')->execute([$me['user_id']]);
+$available   = client_available_balance($db, $me['user_id']);
+$fromBalance = round(min($amount, $available), 2);
+$fromCard    = round($amount - $fromBalance, 2);
+
+$method = $body['method'] ?? '';
+if ($fromCard > 0 && !isset(PAYMENT_METHODS[$method])) {
+    $db->rollBack();
+    http_response_code(422);
+    echo json_encode(['error' => 'Выберите способ оплаты для оставшихся ' . $fromCard . ' ₴']);
+    exit;
+}
+
 $db->prepare('UPDATE contracts SET escrowed_amount = escrowed_amount + ? WHERE id = ?')
    ->execute([$amount, $contractId]);
-$db->prepare("
-    INSERT INTO wallet_transactions (user_id, type, amount, description, related_contract_id)
-    VALUES (?, 'deposit', ?, ?, ?)
-")->execute([$me['user_id'], $amount, 'Депозит по контракту #' . contract_number($contractId) . ' (' . PAYMENT_METHODS[$method] . ')', $contractId]);
+
+if ($fromBalance > 0) {
+    $db->prepare('UPDATE client_profiles SET balance = balance - ? WHERE user_id = ?')
+       ->execute([$fromBalance, $me['user_id']]);
+    $db->prepare("
+        INSERT INTO wallet_transactions (user_id, type, amount, description, related_contract_id)
+        VALUES (?, 'balance_payment', ?, ?, ?)
+    ")->execute([$me['user_id'], $fromBalance, 'Депозит по контракту #' . $number . ' (с баланса на сайте)', $contractId]);
+}
+if ($fromCard > 0) {
+    $db->prepare("
+        INSERT INTO wallet_transactions (user_id, type, amount, description, related_contract_id)
+        VALUES (?, 'deposit', ?, ?, ?)
+    ")->execute([$me['user_id'], $fromCard, 'Депозит по контракту #' . $number . ' (' . PAYMENT_METHODS[$method] . ')', $contractId]);
+}
 $db->commit();
 
-create_notification($db, (int)$contract['freelancer_user_id'], 'escrow_deposit', 'Клиент внёс депозит по контракту #' . contract_number($contractId));
+create_notification($db, (int)$contract['freelancer_user_id'], 'escrow_deposit', 'Клиент внёс депозит по контракту #' . $number);
 
 $stmt = $db->prepare('SELECT escrowed_amount FROM contracts WHERE id = ?');
 $stmt->execute([$contractId]);
 
-echo json_encode(['escrowed_amount' => (float) $stmt->fetchColumn()]);
+echo json_encode([
+    'escrowed_amount'   => (float) $stmt->fetchColumn(),
+    'from_balance'      => $fromBalance,
+    'from_card'         => $fromCard,
+    'available_balance' => client_available_balance($db, $me['user_id']),
+]);

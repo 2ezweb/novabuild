@@ -44,7 +44,7 @@ async function loadUsers() {
         <table class="table table-sm align-middle">
           <thead>
             <tr>
-              <th>Имя</th><th>Email / логин</th><th>Роль</th><th>Верификация</th><th>Статус</th><th>Регистрация</th>
+              <th>Имя</th><th>Email / логин</th><th>Роль</th><th>Верификация</th><th>Статус</th><th>Регистрация</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -72,9 +72,31 @@ function userRow(u) {
       <td>${esc(u.email)}</td>
       <td>${esc(roleLabel)}</td>
       <td>${verMap[u.verification_status] ?? ''}</td>
-      <td>${u.status === 'banned' ? '<span class="badge bg-danger">banned</span>' : '<span class="badge bg-light text-dark border">active</span>'}</td>
+      <td>${u.status === 'banned' ? '<span class="badge bg-danger">заблокирован</span>' : '<span class="badge bg-light text-dark border">активен</span>'}</td>
       <td class="text-muted small">${esc(u.created_at)}</td>
+      <td class="text-end">${userBanButton(u)}</td>
     </tr>`;
+}
+
+// Admins can't be banned (admin.php set_user_status refuses too).
+function userBanButton(u) {
+  if (u.role === 'admin') return '';
+  return u.status === 'banned'
+    ? `<button class="btn btn-sm btn-outline-success" onclick="setUserStatus(${u.id}, 'active')">Разблокировать</button>`
+    : `<button class="btn btn-sm btn-outline-danger" onclick="setUserStatus(${u.id}, 'banned')">🚫 Заблокировать</button>`;
+}
+
+async function setUserStatus(userId, status) {
+  const q = status === 'banned'
+    ? 'Заблокировать пользователя? Он сразу потеряет доступ к сайту, даже если сейчас залогинен.'
+    : 'Разблокировать пользователя?';
+  if (!confirm(q)) return;
+  try {
+    await apiPost('/admin.php', { action: 'set_user_status', user_id: userId, status });
+    loadUsers();
+  } catch (e) {
+    alert(e.message);
+  }
 }
 
 // ─── VERIFICATION REQUESTS ────────────────────────────────────────────────────
@@ -286,11 +308,20 @@ async function openEscalationDetail(id) {
   }
 }
 
-const ESCALATION_MATERIALS_LABELS = { exchange_reserve: 'резерв биржи', client: 'оплачивает заказчик', exchange_service: 'закупка биржей' };
 const ESCALATION_ESTIMATE_STATUS  = { submitted: 'на рассмотрении', accepted: 'утверждена', rejected: 'отклонена' };
+
+// Plain new-tab links — the admin page has no fullscreen gallery overlay.
+function adminFileLinks(files) {
+  if (!files || !files.length) return '';
+  return '<div class="d-flex flex-wrap gap-1 mt-1">' + files.map(f => `
+    <a href="${assetUrl(f.file_path)}" target="_blank" rel="noopener" class="attachment-file-link border rounded px-2 py-1 small text-decoration-none">
+      ${fileIcon(f.mime_type)} ${esc(f.original_name)}
+    </a>`).join('') + '</div>';
+}
 
 function renderEscalationDetail() {
   const { escalation, contract, messages, estimates } = currentEscalation;
+  const submissions = currentEscalation.submissions || [];
   const body = document.getElementById('escalation-detail-body');
 
   const clientName = contract.client
@@ -311,9 +342,21 @@ function renderEscalationDetail() {
     ? messages.map(m => `
         <div class="mb-2">
           <div class="small fw-semibold">${esc([m.first_name, m.last_name].filter(Boolean).join(' ') || 'Участник')} <span class="text-muted fw-normal">· ${esc(timeAgo(m.created_at))}</span></div>
-          <div class="small" style="white-space:pre-wrap">${esc(m.body)}</div>
+          ${m.body ? `<div class="small" style="white-space:pre-wrap">${esc(m.body)}</div>` : ''}
+          ${adminFileLinks(m.attachments)}
         </div>`).join('')
     : '<p class="text-muted small mb-0">Сообщений нет.</p>';
+
+  const SUBMISSION_STATUS = { submitted: 'ждёт решения клиента', accepted: 'принята', rejected: 'возвращена на доработку' };
+  const submissionsHtml = submissions.length
+    ? submissions.map(s => `
+        <div class="border rounded p-2 mb-2">
+          <div class="small text-muted">${esc(timeAgo(s.created_at))} · ${esc(SUBMISSION_STATUS[s.status] || s.status)}</div>
+          ${s.comment ? `<div class="small" style="white-space:pre-wrap">${esc(s.comment)}</div>` : ''}
+          ${adminFileLinks(s.files)}
+          ${s.client_comment ? `<div class="small mt-1"><span class="text-muted">Клиент:</span> ${esc(s.client_comment)}</div>` : ''}
+        </div>`).join('')
+    : '<p class="text-muted small mb-0">Работу не сдавали.</p>';
 
   const latestEstimate = estimates[0] || null;
   const estimateHtml = latestEstimate ? `
@@ -352,7 +395,6 @@ function renderEscalationDetail() {
           <dt class="col-5 text-muted fw-normal">Цена</dt><dd class="col-7 fw-semibold">${esc(formatUAH(contract.price))}</dd>
           <dt class="col-5 text-muted fw-normal">Срок</dt><dd class="col-7">${contract.deadline ? esc(contract.deadline) : '—'}</dd>
           <dt class="col-5 text-muted fw-normal">В эскроу</dt><dd class="col-7">${esc(formatUAH(contract.escrowed_amount))}</dd>
-          ${contract.materials_paid_by ? `<dt class="col-5 text-muted fw-normal">Материалы</dt><dd class="col-7">${esc(ESCALATION_MATERIALS_LABELS[contract.materials_paid_by] || contract.materials_paid_by)}</dd>` : ''}
         </dl>
       </div>
       <div class="col-md-6">
@@ -365,6 +407,11 @@ function renderEscalationDetail() {
     <div class="mb-3">
       <h6 class="fw-semibold mb-2">Переписка</h6>
       <div class="border rounded p-2" style="max-height:260px; overflow-y:auto">${messagesHtml}</div>
+    </div>
+
+    <div class="mb-3">
+      <h6 class="fw-semibold mb-2">Сдача работы</h6>
+      ${submissionsHtml}
     </div>
 
     <div class="mb-4">

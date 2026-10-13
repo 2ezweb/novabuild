@@ -80,9 +80,19 @@ function appendMessage(m) {
   const bubble = document.createElement('div');
   bubble.className = 'chat-bubble ' + (mine ? 'mine' : 'theirs');
 
-  const body = document.createElement('div');
-  body.textContent = m.body;
-  bubble.appendChild(body);
+  if (m.body) {
+    const body = document.createElement('div');
+    body.textContent = m.body;
+    bubble.appendChild(body);
+  }
+
+  // Files/photos (message_attachments) — thumbnails open the fullscreen gallery.
+  if (m.attachments && m.attachments.length) {
+    const files = document.createElement('div');
+    files.className = 'chat-attachments' + (m.body ? ' mt-2' : '');
+    files.innerHTML = attachmentsHtml(m.attachments);
+    bubble.appendChild(files);
+  }
 
   const time = document.createElement('span');
   time.className = 'chat-time';
@@ -96,16 +106,53 @@ function appendMessage(m) {
 async function sendMessage(event) {
   event.preventDefault();
   const input = document.getElementById('message-input');
+  const fileInput = document.getElementById('message-files');
   const text = input.value.trim();
-  if (!text) return;
+  const files = fileInput.files;
+  if (!text && !files.length) return;
+  hideError('chat-error');
 
+  const fileErr = checkUploadSelection(files);
+  if (fileErr) return showError('chat-error', fileErr);
+
+  const sendBtn = document.getElementById('message-send-btn');
+  sendBtn.disabled = true;
   try {
-    const res = await apiPost('/messages.php', { conversation_id: conversationId, body: text });
-    appendMessage({ id: res.id, sender_id: currentUser.id, body: text, created_at: res.created_at });
+    let res;
+    if (files.length) {
+      const fd = new FormData();
+      fd.append('conversation_id', conversationId);
+      fd.append('body', text);
+      for (const f of files) fd.append('files[]', f);
+      res = await apiUpload('/messages.php', fd);
+      if (res.attachments.length < files.length) {
+        showError('chat-error', `${files.length - res.attachments.length} файл(ов) не прошли проверку формата и не отправлены.`);
+      }
+    } else {
+      res = await apiPost('/messages.php', { conversation_id: conversationId, body: text });
+    }
+    appendMessage(res);
     input.value = '';
+    clearChatFiles();
   } catch (e) {
     showError('chat-error', e.message);
+  } finally {
+    sendBtn.disabled = false;
   }
+}
+
+// 📎 picker: shows what's attached under the input until the message is sent.
+function onChatFilesChange() {
+  const files = Array.from(document.getElementById('message-files').files);
+  const box = document.getElementById('message-files-preview');
+  if (!files.length) { box.innerHTML = ''; return; }
+  box.innerHTML = files.map(f => `<span class="badge bg-light text-dark border me-1">${fileIcon(f.type || '')} ${esc(truncateText(f.name, 30))}</span>`).join('')
+    + `<button type="button" class="btn btn-link btn-sm p-0 ms-1" onclick="clearChatFiles()">убрать</button>`;
+}
+
+function clearChatFiles() {
+  document.getElementById('message-files').value = '';
+  document.getElementById('message-files-preview').innerHTML = '';
 }
 
 // ─── REALTIME: Pusher if configured, plain polling fallback otherwise ────────
@@ -301,7 +348,6 @@ async function submitPropose() {
   const type = proposeType();
   const price = Number(val('propose-price'));
   const deadline = val('propose-deadline');
-  const materials = document.querySelector('input[name="propose-materials"]:checked')?.value || null;
   const stageTitle = val('propose-stage-title');
   const offerId = Number(document.getElementById('propose-offer-select').value) || null;
 
@@ -314,7 +360,6 @@ async function submitPropose() {
     type,
     price,
     deadline: deadline || null,
-    materials_paid_by: materials,
     offer_id: offerId,
   };
   if (type === 'staged') payload.stage_title = stageTitle;

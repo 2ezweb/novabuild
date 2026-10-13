@@ -10,6 +10,7 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth_middleware.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/contract_number.php';
+require_once __DIR__ . '/../includes/dates.php';
 
 $me = require_auth();
 $db = get_db();
@@ -67,7 +68,7 @@ if ($action === 'propose') {
     }
 
     $newPrice    = isset($body['new_price']) && is_numeric($body['new_price']) ? (float) $body['new_price'] : null;
-    $newDeadline = !empty($body['new_deadline']) ? $body['new_deadline'] : null;
+    $newDeadline = validate_deadline($body['new_deadline'] ?? null, 'Новый срок');
 
     if ($newPrice === null && $newDeadline === null) {
         http_response_code(422);

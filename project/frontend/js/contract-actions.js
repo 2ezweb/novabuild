@@ -31,24 +31,14 @@ const CONTRACT_STATUS_BADGE = {
   rejected:  'bg-secondary',
 };
 
-// Materials-purchase clause. Money mechanics are a stub — this is a label only.
-const MATERIALS_LABELS = {
-  exchange_reserve: 'Резерв биржи — деньги по смете бронирует биржа и выплачивает фрилансеру после закупки',
-  client:           'Материалы оплачивает заказчик',
-  exchange_service: 'Закупка силами биржи — бирже платят, её человек закупает и передаёт фрилансеру',
-};
-const MATERIALS_SHORT = {
-  exchange_reserve: 'резерв биржи',
-  client:           'оплачивает заказчик',
-  exchange_service: 'закупка биржей',
-};
-
 let _cmCtx  = { me: null, getContract: () => null, reload: async () => {}, showChatLink: true };
 let _cmOpen = null;      // contract currently shown in #contractModal
 let _cmChange = null;    // its pending change request (active full/stage only)
 let _cmHold = null;      // its dispute hold (failed full/stage + freelancer only)
 let _cmEstimates = [];   // its own СМЕТА records, newest first (full/stage only, not the staged parent)
 let _cmEscalation = null; // latest "вызов администратора" for THIS contract/stage, if any
+let _cmSubmissions = [];  // сдача-приёмка работы, newest first (full/stage only)
+let _cmReview = undefined; // client's review of a closed top-level contract: undefined = n/a, null = none yet
 
 const ESCALATION_RESOLUTION_LABELS = {
   terms_changed:   'условия контракта изменены администрацией',
@@ -120,7 +110,16 @@ async function cmLoadDetails(c) {
   _cmHold = null;
   _cmEstimates = [];
   _cmEscalation = null;
-  if (cmIsStagedParent(c)) return;   // change/dispute/estimate/escalation live on stages, not the parent
+  _cmSubmissions = [];
+  _cmReview = undefined;
+  // Отзыв — on a closed top-level contract (full, or the staged parent as a whole).
+  if (!c.parent_contract_id && ['completed', 'failed'].includes(c.status)) {
+    try { _cmReview = (await apiFetch(`/reviews.php?contract_id=${c.id}`)).review; } catch { _cmReview = undefined; }
+  }
+  if (cmIsStagedParent(c)) return;   // change/dispute/estimate/escalation/hand-over live on stages, not the parent
+  if (c.status !== 'proposed') {
+    try { _cmSubmissions = await apiFetch(`/work_submissions.php?contract_id=${c.id}`); } catch { /* keep [] */ }
+  }
   if (c.status === 'active') {
     try { _cmChange = await apiFetch(`/contract_change_requests.php?contract_id=${c.id}`); } catch { /* keep null */ }
     try { _cmEscalation = await apiFetch(`/escalations.php?contract_id=${c.id}`); } catch { /* keep null */ }
@@ -153,12 +152,6 @@ async function cmAfterMutation() {
 function cmRender() {
   cmRenderBody(_cmOpen);
   cmRenderMenu(_cmOpen);
-}
-
-function cmMaterialsRow(c) {
-  if (!c.materials_paid_by) return '';
-  return `<dt class="col-5 fw-normal text-muted">Материалы</dt>
-    <dd class="col-7 mb-2" title="${esc(MATERIALS_LABELS[c.materials_paid_by] || '')}">${esc(MATERIALS_SHORT[c.materials_paid_by] || c.materials_paid_by)}</dd>`;
 }
 
 function cmRenderBody(c) {
@@ -210,7 +203,6 @@ function cmRenderBody(c) {
       <dt class="col-5 fw-normal text-muted">Срок</dt>
       <dd class="col-7 mb-2">${c.deadline ? esc(c.deadline) : '<span class="text-muted">не указан</span>'}</dd>
       ${c.status === 'active' ? `<dt class="col-5 fw-normal text-muted">В эскроу</dt><dd class="col-7 mb-2">${esc(formatUAH(c.escrowed_amount))} <span class="text-muted">из ${esc(formatUAH(c.price))}</span></dd>` : ''}
-      ${cmMaterialsRow(c)}
       ${createdRow}
       ${offerRow}`;
   }
@@ -260,6 +252,7 @@ function cmRenderExtra(c) {
     if (c.status === 'completed') out += `<div class="alert alert-success mt-3 mb-0">✅ Поэтапный контракт завершён.</div>`;
     if (c.status === 'failed')    out += `<div class="alert alert-danger mt-3 mb-0">Поэтапный контракт расторгнут. Незавершённые этапы закрыты, депозиты вернулись на баланс клиента с 7-дневной заморозкой.</div>`;
     if (c.status === 'rejected')  out += `<div class="alert alert-secondary mt-3 mb-0">Поэтапный контракт отклонён.</div>`;
+    out += cmReviewSection(c);
     return out;
   }
 
@@ -321,11 +314,18 @@ function cmRenderExtra(c) {
   if (c.status === 'completed') out += `<div class="alert alert-success mt-3 mb-0">✅ ${isStage ? 'Этап' : 'Контракт'} выполнен, оплата переведена фрилансеру.</div>`;
   if (c.status === 'rejected')  out += `<div class="alert alert-secondary mt-3 mb-0">${isStage ? 'Этап' : 'Контракт'} отклонён фрилансером.</div>`;
 
+  // Сдача-приёмка: form/decision while active, history afterwards.
+  if (c.status === 'active' || ((c.status === 'completed' || c.status === 'failed') && _cmSubmissions.length)) {
+    out += cmSubmissionSection(c);
+  }
+
   // Смета is part of this specific contract/stage — it never existed before
   // the contract went active, and its history stays visible after it closes.
   if (c.status === 'active' || c.status === 'completed' || c.status === 'failed') {
     out += cmEstimateSection(c);
   }
+
+  if (!isStage) out += cmReviewSection(c);
 
   // «Вызов администратора» — a lever for genuine conflicts, only while the
   // contract/stage is still active (a closed one either already has a
@@ -386,6 +386,167 @@ async function cmAddStageFromStage() {
 async function cmCloseParentFromStage(outcome) {
   if (_cmOpen.parent_contract_id) await openContractModal(_cmOpen.parent_contract_id);
   cmClose(outcome);
+}
+
+// ─── СДАЧА-ПРИЁМКА РАБОТЫ (api/work_submissions.php) ───────────────────────
+// Freelancer hands the work over (comment + files); the client answers ДА
+// (accept = close as completed, escrow paid out) or НЕТ (back to rework with
+// a comment). One pending hand-over at a time; older ones fold into history.
+const WORK_SUBMISSION_LABELS = { submitted: 'ждёт решения клиента', accepted: '✓ работа принята', rejected: '↩ возвращена на доработку' };
+const WORK_SUBMISSION_CLASSES = { submitted: 'text-warning', accepted: 'text-success', rejected: 'text-danger' };
+
+function cmSubmissionItemHtml(s) {
+  return `<div class="border rounded p-2 mb-2">
+    <div class="d-flex justify-content-between gap-2 small mb-1">
+      <span class="text-muted">Сдано ${esc(cmFmtDate(s.created_at))}</span>
+      <span class="${WORK_SUBMISSION_CLASSES[s.status] || 'text-muted'}">${esc(WORK_SUBMISSION_LABELS[s.status] || s.status)}</span>
+    </div>
+    ${s.comment ? `<div class="small mb-2" style="white-space:pre-wrap">${esc(s.comment)}</div>` : ''}
+    ${attachmentsHtml(s.files)}
+    ${s.client_comment ? `<div class="small mt-2 p-2 bg-light rounded"><span class="text-muted">Клиент:</span> ${esc(s.client_comment)}</div>` : ''}
+  </div>`;
+}
+
+function cmSubmissionSection(c) {
+  const me = _cmCtx.me;
+  const latest = _cmSubmissions[0] || null;
+  const pending = latest && latest.status === 'submitted' ? latest : null;
+  const active = c.status === 'active';
+  let body = '';
+
+  if (pending) {
+    body += cmSubmissionItemHtml(pending);
+    if (me.role === 'client' && active) {
+      const underpaid = paymentStatus(c) !== 'full'
+        ? `<div class="text-danger small mb-2">Фрилансер получит только то, что внесено в эскроу: ${esc(formatUAH(c.escrowed_amount))} из ${esc(formatUAH(c.price))}.</div>`
+        : '';
+      body += `
+        <textarea class="form-control form-control-sm mb-2" id="ws-client-comment" rows="2" maxlength="5000"
+                  placeholder="Комментарий (обязателен, если возвращаете на доработку)"></textarea>
+        ${underpaid}
+        <div class="d-flex gap-2 flex-wrap">
+          <button class="btn btn-sm btn-success" onclick="cmDecideWork(${pending.id}, true)">✅ Да, принять работу</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="cmDecideWork(${pending.id}, false)">↩️ Нет, на доработку</button>
+        </div>`;
+    } else if (me.role === 'freelancer' && active) {
+      body += `<p class="text-muted small mb-0">Ждём решения клиента.</p>`;
+    }
+  } else if (me.role === 'freelancer' && active) {
+    if (latest && latest.status === 'rejected') {
+      body += `<div class="alert alert-warning small py-2 mb-2">Клиент вернул работу на доработку${latest.client_comment ? ': «' + esc(latest.client_comment) + '»' : ''}. Когда исправите — сдайте снова.</div>`;
+    }
+    body += `
+      <textarea class="form-control form-control-sm mb-2" id="ws-comment" rows="3" maxlength="5000" placeholder="Что сделано, на что обратить внимание..."></textarea>
+      <input type="file" class="form-control form-control-sm mb-1" id="ws-files" multiple accept="${UPLOAD_ACCEPT}">
+      <div class="form-text mb-2">Фото и документы: png/jpg/pdf/docx/xlsx, до ${UPLOAD_MAX_FILE_MB} МБ, не больше ${UPLOAD_MAX_FILES_COUNT} файлов</div>
+      <div id="ws-error" class="alert alert-danger small py-1 d-none"></div>
+      <button class="btn btn-sm btn-primary" onclick="cmSubmitWork(this)">📤 Сдать работу</button>`;
+  } else if (me.role === 'client' && active && !latest) {
+    body += `<p class="text-muted small mb-0">Фрилансер ещё не сдавал работу. Когда сдаст — здесь появятся его комментарий и файлы, и вы решите: принять или вернуть на доработку.</p>`;
+  }
+
+  const history = _cmSubmissions.filter(s => s !== pending);
+  if (history.length) {
+    body += `<details class="mt-2"${active ? '' : ' open'}>
+      <summary class="small text-muted">${active ? 'Предыдущие сдачи' : 'Сдачи работы'} (${history.length})</summary>
+      <div class="mt-2">${history.map(cmSubmissionItemHtml).join('')}</div>
+    </details>`;
+  }
+
+  return `<div class="mt-3 pt-3 border-top">
+    <div class="fw-semibold small mb-2">📦 Сдача работы</div>
+    ${body}
+  </div>`;
+}
+
+async function cmSubmitWork(btn) {
+  hideError('ws-error');
+  const comment = document.getElementById('ws-comment').value.trim();
+  const files = document.getElementById('ws-files').files;
+  if (!comment && !files.length) return showError('ws-error', 'Добавьте комментарий или файлы');
+  const fileErr = checkUploadSelection(files);
+  if (fileErr) return showError('ws-error', fileErr);
+
+  const fd = new FormData();
+  fd.append('action', 'submit');
+  fd.append('contract_id', _cmOpen.id);
+  fd.append('comment', comment);
+  for (const f of files) fd.append('files[]', f);
+
+  btn.disabled = true;
+  try {
+    const res = await apiUpload('/work_submissions.php', fd);
+    if (files.length && res.files_saved < files.length) {
+      alert(`Работа сдана, но ${files.length - res.files_saved} файл(ов) не прошли проверку формата и не сохранены.`);
+    }
+    await cmAfterMutation();
+  } catch (e) {
+    showError('ws-error', e.message);
+    btn.disabled = false;
+  }
+}
+
+async function cmDecideWork(submissionId, accept) {
+  const comment = val('ws-client-comment');
+  if (!accept && !comment) return alert('Напишите, что нужно доработать');
+  if (accept) {
+    const what = _cmOpen.parent_contract_id ? 'Этап' : 'Контракт';
+    if (!confirm(`Принять работу? ${what} будет закрыт как выполненный, и ${formatUAH(_cmOpen.escrowed_amount)} из эскроу уйдут фрилансеру. Отменить нельзя.`)) return;
+  }
+  try {
+    await apiPost('/work_submissions.php', { action: 'decide', submission_id: submissionId, accept, comment });
+    await cmAfterMutation();
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+// ─── ОТЗЫВ (api/reviews.php) — client rates the freelancer once per closed ──
+// top-level contract (full, or a staged one as a whole). Shown read-only to both.
+let _cmReviewRating = 0;
+
+function cmReviewSection(c) {
+  if (_cmReview === undefined) return '';
+  if (_cmReview) {
+    return `<div class="mt-3 pt-3 border-top">
+      <div class="fw-semibold small mb-1">⭐ Отзыв клиента</div>
+      <div>${starsHtml(_cmReview.rating)}</div>
+      ${_cmReview.comment ? `<div class="small mt-1" style="white-space:pre-wrap">${esc(_cmReview.comment)}</div>` : ''}
+    </div>`;
+  }
+  if (_cmCtx.me.role !== 'client') return '';
+
+  _cmReviewRating = 0;
+  const stars = [1, 2, 3, 4, 5].map(n =>
+    `<button type="button" class="btn btn-link p-0 fs-4 text-decoration-none review-star" data-n="${n}" onclick="cmPickStar(${n})">☆</button>`
+  ).join('');
+  return `<div class="mt-3 pt-3 border-top">
+    <div class="fw-semibold small mb-1">⭐ Оцените работу фрилансера</div>
+    <div class="mb-2 lh-1">${stars}</div>
+    <textarea class="form-control form-control-sm mb-2" id="review-comment" rows="2" maxlength="2000" placeholder="Пара слов о работе (необязательно)"></textarea>
+    <div id="review-error" class="alert alert-danger small py-1 d-none"></div>
+    <button class="btn btn-sm btn-primary" onclick="cmSubmitReview()">Оставить отзыв</button>
+  </div>`;
+}
+
+function cmPickStar(n) {
+  _cmReviewRating = n;
+  document.querySelectorAll('.review-star').forEach(b => {
+    const on = Number(b.dataset.n) <= n;
+    b.textContent = on ? '★' : '☆';
+    b.classList.toggle('text-warning', on);
+  });
+}
+
+async function cmSubmitReview() {
+  hideError('review-error');
+  if (!_cmReviewRating) return showError('review-error', 'Выберите оценку от 1 до 5');
+  try {
+    await apiPost('/reviews.php', { contract_id: _cmOpen.id, rating: _cmReviewRating, comment: val('review-comment') });
+    await cmAfterMutation();
+  } catch (e) {
+    showError('review-error', e.message);
+  }
 }
 
 // ─── СМЕТА (bill of materials) — part of THIS contract/stage, not a separate ─
@@ -688,21 +849,68 @@ async function cmSubmitChange() {
   }
 }
 
-function cmOpenDeposit() {
+// Balance first (escrow.php): the client's AVAILABLE site balance (minus frozen
+// holds) is spent before the card. Re-read from me.php on every open — it
+// changes whenever another contract is paid or refunded.
+let _cmAvailableBalance = 0;
+
+async function cmOpenDeposit() {
   hideError('deposit-error');
+  try {
+    const me = await apiFetch('/me.php');
+    _cmAvailableBalance = Number(me.available_balance) || 0;
+  } catch {
+    _cmAvailableBalance = 0;   // server recomputes anyway; worst case the split preview is off
+  }
   const remaining = Math.max(0, Number(_cmOpen.price) - Number(_cmOpen.escrowed_amount || 0));
   document.getElementById('deposit-amount').value = remaining;
   document.getElementById('deposit-remaining-hint').textContent = `Остаток: ${formatUAH(remaining)}`;
   document.getElementById('deposit-card-number').value = '';
   document.getElementById('deposit-card-expiry').value = '';
   document.getElementById('deposit-card-cvv').value = '';
+  document.getElementById('deposit-withdraw-notice').textContent = 'ℹ️ ' + CLIENT_WITHDRAW_NOTICE;
+  cmRenderDepositSplit();
   cmOpenChild('depositModal');
+}
+
+// Splits the entered amount into "с баланса" + "картой"; when the balance
+// covers everything, the payment-method tabs are replaced by one button.
+function cmDepositSplit() {
+  const amount = Math.max(0, Number(val('deposit-amount')) || 0);
+  const fromBalance = Math.min(amount, _cmAvailableBalance);
+  const fromCard = Math.round((amount - fromBalance) * 100) / 100;
+  return { amount, fromBalance, fromCard };
+}
+
+function cmRenderDepositSplit() {
+  const { amount, fromBalance, fromCard } = cmDepositSplit();
+  const box = document.getElementById('deposit-split');
+  const methods = document.getElementById('deposit-methods');
+  const balanceBtn = document.getElementById('deposit-balance-only-btn');
+
+  if (_cmAvailableBalance <= 0) {
+    box.style.display = 'none';
+    methods.style.display = '';
+    balanceBtn.style.display = 'none';
+    return;
+  }
+
+  box.style.display = '';
+  box.innerHTML = `
+    <div class="d-flex justify-content-between"><span class="text-muted">Доступно на балансе сайта</span><span>${esc(formatUAH(_cmAvailableBalance))}</span></div>
+    <div class="d-flex justify-content-between"><span>Спишется с баланса</span><span class="fw-semibold text-success">${esc(formatUAH(fromBalance))}</span></div>
+    <div class="d-flex justify-content-between"><span>Доплатить картой</span><span class="fw-semibold">${esc(formatUAH(fromCard))}</span></div>`;
+
+  const balanceCovers = amount > 0 && fromCard <= 0;
+  methods.style.display = balanceCovers ? 'none' : '';
+  balanceBtn.style.display = balanceCovers ? '' : 'none';
 }
 
 async function cmSubmitDeposit(method) {
   hideError('deposit-error');
   const amount = Number(val('deposit-amount'));
   if (!amount || amount <= 0) return showError('deposit-error', 'Укажите сумму');
+  if (cmDepositSplit().fromCard <= 0) method = '';   // balance covers it all — no card involved
 
   if (method === 'card') {
     const number = document.getElementById('deposit-card-number').value.replace(/\s/g, '');
@@ -727,8 +935,6 @@ function cmOpenStage() {
   document.getElementById('stage-title').value = '';
   document.getElementById('stage-price').value = '';
   document.getElementById('stage-deadline').value = '';
-  const sel = document.getElementById('stage-materials');
-  if (sel) sel.value = 'exchange_reserve';
   cmOpenChild('stageModal');
 }
 
@@ -737,7 +943,6 @@ async function cmSubmitStage() {
   const title = val('stage-title');
   const price = Number(val('stage-price'));
   const deadline = val('stage-deadline');
-  const sel = document.getElementById('stage-materials');
   if (!title) return showError('stage-error', 'Укажите название этапа');
   if (!price || price <= 0) return showError('stage-error', 'Укажите цену этапа');
 
@@ -748,7 +953,6 @@ async function cmSubmitStage() {
       title,
       price,
       deadline: deadline || null,
-      materials_paid_by: sel ? sel.value : null,
     });
     await cmAfterMutation();
     bootstrap.Modal.getOrCreateInstance(document.getElementById('stageModal')).hide();

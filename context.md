@@ -498,6 +498,8 @@ Email-верификация при регистрации (код на почт
   отправляются (фронт держит их у себя). MIN 10 / MAX 1 000 000 ₴. Плюсует contracts.escrowed_amount,
   пишет 'deposit' в wallet_transactions, шлёт 'escrow_deposit' фрилансеру. UI — кнопка «💳 Оплатить
   контракт» на баннере активного контракта в чате (chat.js openDepositModal/submitDeposit).
+  С 2026-10-13: сначала списывается доступный баланс клиента, остаток — картой (см. «Заход 2026-10-13
+  (вторая половина)», п.1). UI теперь в contract-actions.js cmOpenDeposit/cmSubmitDeposit.
 
 Кошелёк и вывод (freelancer_profiles.balance / client_profiles.balance, wallet_transactions,
 withdrawal_requests; api/wallet.php)
@@ -519,9 +521,10 @@ withdrawal_requests; api/wallet.php)
   (холды pending + disputed), POST resolve_dispute {hold_id, resolution: to_client|to_freelancer};
   to_freelancer перекидывает сумму client.balance → freelancer.balance + wallet_transactions, обе
   стороны получают уведомление.
-  БАГ-ЗАМЕТКА: resolve_dispute пишет resolution как 'to_client'/'to_freelancer', а ENUM в
-  balance_holds — ('pending','released_to_client','released_to_freelancer'). Рассинхрон кода и
-  схемы; ветка на боевой БД ещё не отрабатывала (в дампе balance_holds пуст).
+  ИСПРАВЛЕНО 2026-10-13: resolve_dispute писал в balance_holds.resolution 'to_client'/'to_freelancer',
+  которых нет в ENUM ('pending','released_to_client','released_to_freelancer'). Теперь API по-прежнему
+  принимает to_client|to_freelancer, а в БД пишет 'released_' . $resolution. Все остальные места
+  (me.php frozen_amount, disputes.php, список споров) читают только 'pending' — их не задело.
 
 Финансовый отчёт (api/finance.php; finance.html/js)
   GET ?period=month|year|all → временной ряд «пришло/ушло» из wallet_transactions (фрилансер:
@@ -692,15 +695,13 @@ requireAuth()). Кэш-бастинг статики поднят до ?v=8.
       подшивается c.stages[] + агрегаты c.price (сумма не-rejected этапов) и c.escrowed_amount.
     pay_freelancer()/refund_with_hold() вынесены в хелперы contracts.php (шарятся close + каскад).
 
-  Пункт «кто покупает материалы» — contracts.materials_paid_by / у каждого этапа своя
-  ENUM('exchange_reserve','client','exchange_service'). ЗАГЛУШКА: только хранится и показывается
-  ярлыком (MATERIALS_LABELS/MATERIALS_SHORT в contract-actions.js), на деньги/эскроу НЕ влияет.
-  Выбирается в #proposeModal и #stageModal.
+  Пункт «кто покупает материалы» — ВЫПИЛЕН ИЗ КОДА 2026-10-13, см. раздел «Наработки на будущее:
+  кто покупает материалы» ниже. Сейчас материалы всегда на заказчике.
 
   Фронт: contract-actions.js — модалка теперь знает про staged-parent (агрегат + список этапов
   cmStagesSection + «＋ Сформировать этап» → #stageModal, cmSubmitStage) и про этап (заголовок
   «Этап N · #num», «↑ открыть» к parent). getContract хостов ищет и во вложенных c.stages
-  (getContractById в chat.js и contracts.js). #proposeModal получил радио тип/материалы + поле
+  (getContractById в chat.js и contracts.js). #proposeModal получил радио типа контракта + поле
   названия 1-го этапа (onProposeTypeChange переключает). #stageModal и #estimateModal —
   продублированы в chat.html (+ #stageModal в contracts.html). contracts.js: бейдж «поэтапный · N эт.».
 
@@ -938,10 +939,137 @@ requireAuth()). Кэш-бастинг статики поднят до ?v=8.
   Кэш-бастинг ?v=17 → ?v=18 на всех 13 страницах.
 
 
-База данных — 15 таблиц (актуально на 2026-09-10, см. kotegg007_novabuild.sql)
-ПОСЛЕ МИГРАЦИИ 2026-09-10 — 16 таблиц: + contract_estimates; contracts += type / parent_contract_id /
-seq / title / materials_paid_by / estimate_id (этапы живут в этой же таблице).
-ПОСЛЕ МИГРАЦИИ 2026-09-16 — 17 таблиц: + admin_escalations; contracts += frozen_at.
+Состояние на 2026-10-13
+
+  - Всё, что было сделано с июля по 16 сентября, закоммичено одним коммитом c1d1f8c «Backup 13.10».
+  - Все три миграции (2026-09-10_staged_contracts_estimates, 2026-09-16_estimate_contract_link,
+    2026-09-16_admin_escalations) прогнаны на тест-сервере — подтверждено свежим дампом
+    kotegg007_novabuild.sql от 2026-10-13 (17 таблиц, все новые колонки и FK на месте).
+  - Пункт «кто покупает материалы» выпилен из кода (см. «Наработки на будущее» ниже). Кэш ?v=18 → ?v=19.
+
+
+Заход 2026-10-13 (вторая половина): баланс клиента, даты, бан, сдача-приёмка, файлы в чате, отзывы
+
+  МИГРАЦИЯ project/sql/2026-10-13_submissions_chat_files_reviews.sql — ПРОГНАТЬ ДО ВЫКЛАДКИ КОДА
+  (contracts.php close, bids.php, messages.php и др. уже читают новые таблицы). Безопасно перезапускать.
+  Добавляет: wallet_transactions.type += 'balance_payment'; таблицы work_submissions,
+  work_submission_files, message_attachments, reviews (→ 21 таблица).
+
+  1) Баланс клиента в приоритете (api/escrow.php, includes/client_balance.php)
+     Депозит по контракту/этапу: сначала списывается ДОСТУПНЫЙ баланс клиента
+     (client_profiles.balance − frozen, где frozen — та же формула, что в me.php: холды в 7-дневном
+     окне или под спором), остаток — способом оплаты (card|gpay|liqpay, всё ещё заглушки). Если баланс
+     покрывает всё — method не нужен. Строка баланса блокируется SELECT … FOR UPDATE. В
+     wallet_transactions: часть с баланса — новый тип 'balance_payment' (НЕ 'deposit', чтобы
+     finance.php не посчитал её как новый приход), часть картой — 'deposit' как раньше. Ответ:
+     escrowed_amount, from_balance, from_card, available_balance. me.php для клиента отдаёт
+     available_balance. UI: модалка оплаты (chat.html/contracts.html #depositModal) показывает
+     раскладку «с баланса / доплатить картой»; если баланса хватает — вместо вкладок оплаты одна
+     кнопка «Оплатить с баланса на сайте» (contract-actions.js cmRenderDepositSplit).
+     Вывод для клиента НЕ делали: текст CLIENT_WITHDRAW_NOTICE (common.js) — «Вывод денег для
+     клиента возможно осуществить только с помощью технической поддержки…» — в модалке оплаты и в
+     блоке баланса кабинета; короткая версия под балансом на дашборде клиента.
+
+  2) Холды по-прежнему не отпускаются (решение: позже).
+
+  3) Проверка дат (includes/dates.php validate_deadline) — диапазон СЕГОДНЯ … СЕГОДНЯ + 15 ЛЕТ
+     (DEADLINE_MAX_YEARS), формат строго Y-m-d, иначе 422 с понятным текстом. Подключено:
+     offers.php POST/PUT, contracts.php propose/add_stage, contract_change_requests.php propose,
+     admin.php resolve_escalation (new_deadline). Поле срока по-прежнему НЕОБЯЗАТЕЛЬНОЕ —
+     проверяется только если заполнено. Фронт: common.js проставляет min/max всем
+     <input type="date"> на загрузке и при фокусе (так ловится и динамическая форма в админке).
+     Старые кривые даты в БД (0000-00-00, 1222-12-12) не трогали.
+
+  4) Бан (admin.php POST set_user_status {user_id, status: active|banned}; админа забанить нельзя).
+     Кнопки «🚫 Заблокировать / Разблокировать» в таблице пользователей админки. require_auth()
+     (auth_middleware.php) теперь на КАЖДОМ запросе перечитывает users.status: banned → 403
+     {banned:true}, удалённый пользователь → 401. Т.е. бан действует сразу, даже по уже выданному
+     JWT. requireAuth() на фронте при banned уводит на login.html?banned=1 с сообщением.
+
+  5) Сдача-приёмка работы (api/work_submissions.php; таблицы work_submissions, work_submission_files)
+     Только полный контракт или этап (не поэтапный родитель), только active.
+     - submit (multipart: contract_id, comment, files[]) — фрилансер; нужен комментарий или файл;
+       одна сдача в статусе submitted за раз. Файлы → uploads/submissions/. Уведомление клиенту.
+     - decide (JSON: submission_id, accept, comment) — клиент. ДА = то же, что close:success
+       (pay_freelancer, completed). НЕТ = rejected, комментарий ОБЯЗАТЕЛЕН («что доработать»).
+     - GET ?contract_id — история сдач с файлами.
+     Обычное «⋮ Закрыть» осталось как запасной путь. Если контракт закрыт любым другим способом
+     (close, каскад поэтапного, принудительно админом), висящая сдача закрывается тем же исходом —
+     contract_payouts.php settle_pending_submissions(). UI — секция «📦 Сдача работы» в модалке
+     контракта (contract-actions.js cmSubmissionSection). Админ видит сдачи в разборе эскалации.
+
+  6) Файлы в чате (messages.php; таблица message_attachments)
+     POST multipart (conversation_id, body, files[]) — body может быть пустым, если есть файлы
+     (в messages.body тогда ''). GET и Pusher-событие отдают attachments[]. Файлы → uploads/chat/.
+     chat.html: кнопка 📎, превью выбранных файлов, картинки открываются в полноэкранной галерее.
+     conversations.php превью «📎 Файл» для сообщения без текста. Админ видит файлы в переписке
+     эскалации (обычными ссылками).
+
+  7) Отзывы и рейтинг (api/reviews.php; таблица reviews)
+     Один отзыв клиента на закрытый (completed ИЛИ failed) контракт верхнего уровня — полный или
+     поэтапный целиком, не на этап. 1–5 звёзд + комментарий до 2000, не редактируется.
+     UI — блок «⭐» в модалке закрытого контракта. Рейтинг (среднее + кол-во) — в карточках заявок
+     offer.html (bids.php) и на freelancer-profile.html (+ «выполнено контрактов» и последние 20 отзывов).
+
+  Общее: includes/uploads.php store_uploaded_files() — единая проверка файлов (png/jpg/pdf/docx/xlsx,
+  15 МБ, 10 шт., finfo + ZipArchive для docx/xlsx) для офферов, сдачи работы и чата. common.js:
+  attachmentsHtml(), checkUploadSelection(), starsHtml(), ratingBadgeHtml(). Галерея (#image-gallery-
+  overlay) добавлена на chat.html и contracts.html. .gitignore: uploads/submissions/*, uploads/chat/*.
+  Файлы чата и сдач публично доступны по прямой ссылке (случайные имена) — как и вложения офферов.
+  Кэш ?v=19 → ?v=20.
+
+
+Наработки на будущее: кто покупает материалы (выпилено из кода 2026-10-13)
+
+  Решение 2026-10-13: пока материалы ВСЕГДА на заказчике — он сам решает вопрос закупки, биржа в
+  этом не участвует. Пункт выбора убран из UI и API, сейчас в форме предложения контракта только
+  подсказка «Материалы закупает заказчик самостоятельно».
+
+  Что было спроектировано и жило в коде с 2026-09-10 по 2026-10-13 (заглушкой — на деньги не влияло):
+  выбор при заключении контракта ИЛИ каждого этапа, одно из трёх:
+    1) exchange_reserve — «Резерв биржи»: биржа резервирует у себя деньги по смете и выплачивает их
+       фрилансеру, когда тот сам закупил материалы.
+    2) client — «Оплачивает заказчик»: заказчик сам покупает/оплачивает материалы (это и есть
+       текущее поведение по умолчанию для всех контрактов).
+    3) exchange_service — «Закупка силами биржи»: клиент платит бирже, человек от биржи едет,
+       закупает всё по смете и передаёт фрилансеру.
+  Как было устроено: contracts.materials_paid_by ENUM('exchange_reserve','client','exchange_service')
+  NULL — на полном контракте или на каждом этапе свой; contracts.php принимал materials_paid_by в
+  propose и add_stage (whitelist MATERIALS_OPTIONS); радио в #proposeModal, селект в #stageModal;
+  ярлык «Материалы: …» в карточке контракта (MATERIALS_LABELS/MATERIALS_SHORT, cmMaterialsRow в
+  contract-actions.js) и в админском разборе эскалации.
+
+  Колонка contracts.materials_paid_by В БД ОСТАВЛЕНА (дремлет, всегда NULL у новых контрактов,
+  у старых тестовых строк остались значения) — чтобы при возврате к фиче не нужна была миграция.
+  Если решим не возвращаться: ALTER TABLE contracts DROP COLUMN materials_paid_by;
+
+  При возврате к фиче продумать: реальное движение денег для варианта 1 (отдельный резерв на сумму
+  сметы, выплата фрилансеру по подтверждению закупки — чеки?) и для варианта 3 (заказ услуги закупки,
+  кто подтверждает передачу материалов); связь со сметой (contract_estimates.total как база резерва).
+
+
+База данных — 21 таблица после миграции 2026-10-13_submissions_chat_files_reviews (до неё — 17, см. kotegg007_novabuild.sql от 2026-10-13)
+  2026-09-10: 15 таблиц. Миграция 2026-09-10 → 16: + contract_estimates; contracts += type /
+  parent_contract_id / seq / title / materials_paid_by / estimate_id (этапы живут в этой же таблице).
+  Миграции 2026-09-16 → 17: + admin_escalations; contracts += frozen_at; contract_estimates += contract_id.
+  Миграция 2026-10-13 → 21: + work_submissions, work_submission_files, message_attachments, reviews;
+  wallet_transactions.type += balance_payment.
+
+work_submissions       — id, contract_id FK (полный контракт или этап), freelancer_user_id FK, comment TEXT NULL,
+                         status ENUM(submitted|accepted|rejected), client_comment TEXT NULL, created_at, decided_at
+work_submission_files  — id, submission_id FK ON DELETE CASCADE, file_path, original_name, mime_type, size, created_at
+message_attachments    — id, message_id FK ON DELETE CASCADE, file_path, original_name, mime_type, size, created_at
+reviews                — id, contract_id FK UNIQUE (контракт верхнего уровня), client_user_id FK,
+                         freelancer_user_id FK, rating TINYINT 1–5, comment TEXT NULL, created_at
+
+admin_escalations      — id, contract_id FK (контракт или этап, не поэтапный родитель), raised_by_user_id FK,
+                         reason TEXT, status ENUM(open|resolved),
+                         resolution ENUM(terms_changed|closed_success|closed_failure|frozen) NULL,
+                         resolution_note, resolved_by_user_id FK NULL, created_at, resolved_at
+contract_estimates     — id, conversation_id FK, contract_id FK NULL (к какому контракту/этапу — у новых
+                         всегда заполнен), freelancer_user_id FK, items LONGTEXT (JSON [{name,qty,unit,
+                         unit_price}]), note, total DECIMAL, status ENUM(submitted|accepted|rejected),
+                         created_at, decided_at
 
 users                  — id, email (он же логин админа), password_hash (Argon2id+pepper),
                          role ENUM(client|freelancer|admin), first_name, last_name, avatar_path,
@@ -956,7 +1084,7 @@ client_profiles        — id, user_id FK, company_name (опционально)
 offers                 — id, client_id FK→client_profiles, title, description, budget DECIMAL, deadline DATE,
                          status ENUM(open|in_progress|closed),
                          outdated_at DATETIME NULL (штампуется когда по офферу активируется контракт —
-                         грейс 24ч, потом оффер уходит из ленты), created_at
+                         бейдж «Уже найден работник», грейс 48ч, потом оффер уходит из ленты), created_at
 bids                   — id, offer_id FK, freelancer_id FK→freelancer_profiles, cover_note,
                          connects_spent INT DEFAULT 10, status ENUM(pending|accepted|rejected) — по факту
                          всегда pending (выбор исполнителя идёт через чат→контракт, не через accept заявки),
@@ -967,19 +1095,23 @@ conversations          — id, client_user_id FK, freelancer_user_id FK, created
                          UNIQUE KEY (client_user_id, freelancer_user_id) — одна переписка на пару
 messages               — id, conversation_id FK, sender_id FK, body TEXT (≤5000), created_at, read_at DATETIME NULL
 contracts              — id, conversation_id FK, client_user_id FK, freelancer_user_id FK, offer_id FK NULL,
-                         price DECIMAL, deadline DATE NULL,
+                         type ENUM(full|staged), parent_contract_id FK NULL (self — строка-этап),
+                         seq NULL (номер этапа), title NULL, price DECIMAL, deadline DATE NULL,
                          status ENUM(proposed|active|completed|failed|rejected),
-                         escrowed_amount DECIMAL DEFAULT 0, created_at, updated_at
+                         frozen_at DATETIME NULL (заморозка админом — только отметка, ничего не блокирует),
+                         escrowed_amount DECIMAL DEFAULT 0,
+                         materials_paid_by ENUM NULL (ДРЕМЛЕТ — фича выпилена, см. «Наработки на будущее»),
+                         estimate_id FK NULL (последняя смета под этот контракт/этап), created_at, updated_at
 contract_change_requests — id, contract_id FK, proposed_by FK, new_price DECIMAL NULL, new_deadline DATE NULL,
                          status ENUM(pending|accepted|rejected), created_at, decided_at DATETIME NULL
-wallet_transactions    — id, user_id FK, type ENUM(deposit|withdrawal|contract_payment|contract_earning),
+wallet_transactions    — id, user_id FK, type ENUM(deposit|withdrawal|contract_payment|contract_earning|balance_payment),
                          amount DECIMAL, description, related_offer_id FK NULL, related_contract_id FK NULL, created_at
 withdrawal_requests    — id, user_id FK, amount DECIMAL, status ENUM(pending|approved|rejected),
                          created_at, decided_at DATETIME NULL
 balance_holds          — id, user_id FK (клиент, получивший возврат), contract_id FK, amount DECIMAL,
                          release_at DATETIME (NOW()+7 дней), disputed_at DATETIME NULL,
                          resolution ENUM(pending|released_to_client|released_to_freelancer) DEFAULT pending,
-                         created_at — см. БАГ-ЗАМЕТКУ про resolution в разделе «Споры и холды»
+                         created_at (API решения спора маппит to_* → released_to_*, см. «Споры и холды»)
 rate_limit_hits        — id, bucket, identifier, created_at; KEY (bucket, identifier, created_at)
 
 Что реализовано (ТАСК 1 + ТАСК 2 + ТАСК 3)
@@ -1015,16 +1147,40 @@ pages/dashboard.html — рабочий дашборд: клиент видит 
 Утилиты в js/common.js: apiFetch(), apiPost(), esc() (XSS-защита), showError()/hideError(), requireAuth(), logout()
 
 
-Что НЕ сделано (следующие таски)
+Что НЕ сделано — план на 2026-10-13 (порядок = предлагаемый приоритет)
 
+ СТАТУС на конец 2026-10-13: 1 ✅ (баланс в приоритете; вывод клиенту — только через поддержку),
+   2 ⏸ позже, 3 ✅, 4 ✅, 5 ✅, 6 ✅, 7 ✅, 8–9 ⏸ «на потом». Детали — «Заход 2026-10-13 (вторая половина)».
 
- Приёмка работ по этапам / вложения внутри контракта
- Отзывы и рейтинг фрилансера после закрытия контракта
- Реальный платёжный шлюз вместо заглушек card|gpay|liqpay
- Автоматическая разморозка balance_holds по истечении release_at — сейчас деньги «висят» на
-   client_profiles.balance, а frozen_amount просто перестаёт их учитывать через 7 дней; отдельного
-   «разморозчика» нет, крона на хостинге нет
- Рассинхрон balance_holds.resolution ENUM ↔ admin.php::resolve_dispute (см. раздел «Споры и холды»)
+ A. Мелкие дыры (быстро, деньги и данные):
+  1. Деньги клиента — тупик. client_profiles.balance копит возвраты (в дампе 1231 ₴), но вывести их
+     нельзя (wallet.php — только freelancer), а оплатить депозит с баланса тоже нельзя (escrow.php —
+     только card|gpay|liqpay). Нужно: оплата депозита с баланса + вывод для клиента.
+  2. Холды не «отпускаются» — balance_holds остаётся 'pending' навсегда после release_at, frozen_amount
+     просто перестаёт его считать. Крона нет → ленивое отпускание при любом чтении (me.php и т.п.):
+     UPDATE ... SET resolution='released_to_client' WHERE pending AND release_at<NOW() AND disputed_at IS NULL.
+  3. Нет серверной валидации дат: в БД оффер с deadline '0000-00-00', этап со сроком 1222-12-12,
+     контракт до 2100 года. Проверять формат и «не в прошлом / не дальше N лет» в offers.php,
+     contracts.php (propose/add_stage), contract_change_requests.php.
+  4. Бан пользователей: users.status ENUM(active|banned) есть и логин банных блокирует, но в админке
+     кнопки бана/разбана нет.
+
+ B. Основной продукт:
+  5. Сдача-приёмка работы: фрилансер «Сдать работу» (комментарий + файлы/фото) → клиент «Принять»
+     (= закрыть с выплатой) или «Вернуть на доработку». Сейчас клиент просто закрывает контракт сам.
+  6. Файлы и фото в чате (фото объекта, документы).
+  7. Отзывы и рейтинг фрилансера после закрытия контракта/этапа.
+  8. Клиент не может отозвать своё предложение контракта, пока фрилансер не ответил; фрилансер не
+     может предложить встречные условия или следующий этап (в ТЗ было «стороны могут добавлять этапы»).
+  9. События контракта приходят опросом раз в 10 с — перевести на Pusher, как сообщения.
+
+ C. Крупное / позже:
+  10. Реальный платёжный шлюз (LiqPay) вместо заглушек.
+  11. «Заморозка» по-настоящему: блокировка действий по замороженному контракту + тикеты поддержки
+      и внутрибиржевое расследование.
+  12. Пункт «кто покупает материалы» — см. «Наработки на будущее».
+  13. Email-уведомления (сейчас только колокольчик на сайте).
+  14. Поиск и фильтры в ленте офферов.
 
  Ранее «не сделано», теперь ГОТОВО (заход 2026-09-10): чат (Pusher + polling), контракты, эскроу,
    споры/холды, кошелёк и вывод средств, докупка коннектов, финансовый отчёт. Выбор исполнителя

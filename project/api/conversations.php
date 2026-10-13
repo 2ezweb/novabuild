@@ -48,6 +48,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $stmt->execute([$me['user_id'], $me['user_id']]);
     $conversations = $stmt->fetchAll();
 
+    // A files-only message has an empty body — give the inbox preview something to show.
+    foreach ($conversations as &$c) {
+        if ($c['last_message'] === '') $c['last_message'] = '📎 Файл';
+    }
+    unset($c);
+
     if (!empty($_GET['id'])) {
         $id = (int) $_GET['id'];
         $one = null;

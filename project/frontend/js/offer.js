@@ -89,6 +89,7 @@ function bidCard(b, rank) {
           <div>
             <div class="fw-semibold"><a href="freelancer-profile.html?user_id=${b.freelancer_user_id}" class="text-decoration-none text-reset">${esc(name)}</a>${verified}</div>
             <div class="text-muted small">${esc(b.specialization || 'Специализация не указана')}</div>
+            <div>${ratingBadgeHtml(b.rating_avg, b.rating_count)}</div>
           </div>
         </div>
         <div class="text-end">
