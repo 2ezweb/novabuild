@@ -13,20 +13,20 @@ $me = require_auth();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
 if ($me['role'] !== 'client') {
     http_response_code(403);
-    echo json_encode(['error' => 'Профили фрилансеров доступны только клиентам']);
+    echo json_encode(['error' => 'Профілі фрилансерів доступні лише клієнтам']);
     exit;
 }
 
 $userId = (int) ($_GET['user_id'] ?? 0);
 if (!$userId) {
     http_response_code(422);
-    echo json_encode(['error' => 'user_id is required']);
+    echo json_encode(['error' => 'Не вказано користувача (user_id)']);
     exit;
 }
 
@@ -43,7 +43,7 @@ $freelancer = $stmt->fetch();
 
 if (!$freelancer) {
     http_response_code(404);
-    echo json_encode(['error' => 'Фрилансер не найден']);
+    echo json_encode(['error' => 'Фрилансера не знайдено']);
     exit;
 }
 

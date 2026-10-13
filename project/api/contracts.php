@@ -24,7 +24,7 @@ function contract_or_404(PDO $db, int $id, int $userId): array {
     $c = $stmt->fetch();
     if (!$c || ((int)$c['client_user_id'] !== $userId && (int)$c['freelancer_user_id'] !== $userId)) {
         http_response_code(404);
-        echo json_encode(['error' => 'Contract not found']);
+        echo json_encode(['error' => 'Контракт не знайдено']);
         exit;
     }
     return $c;
@@ -34,7 +34,7 @@ function contract_or_404(PDO $db, int $id, int $userId): array {
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if (!in_array($me['role'], ['client', 'freelancer'], true)) {
         http_response_code(403);
-        echo json_encode(['error' => 'Контракты доступны только клиентам и фрилансерам']);
+        echo json_encode(['error' => 'Контракти доступні лише клієнтам і фрилансерам']);
         exit;
     }
 
@@ -100,7 +100,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
@@ -111,7 +111,7 @@ $action = $body['action'] ?? '';
 if ($action === 'propose') {
     if ($me['role'] !== 'client') {
         http_response_code(403);
-        echo json_encode(['error' => 'Только клиент может предложить контракт']);
+        echo json_encode(['error' => 'Лише клієнт може запропонувати контракт']);
         exit;
     }
 
@@ -124,12 +124,12 @@ if ($action === 'propose') {
 
     if ($price <= 0) {
         http_response_code(422);
-        echo json_encode(['error' => 'Укажите цену' . ($type === 'staged' ? ' первого этапа' : ' контракта')]);
+        echo json_encode(['error' => 'Вкажіть ціну' . ($type === 'staged' ? ' першого етапу' : ' контракту')]);
         exit;
     }
     if ($type === 'staged' && $stageTitle === '') {
         http_response_code(422);
-        echo json_encode(['error' => 'Укажите название первого этапа']);
+        echo json_encode(['error' => 'Вкажіть назву першого етапу']);
         exit;
     }
 
@@ -138,7 +138,7 @@ if ($action === 'propose') {
     $conv = $stmt->fetch();
     if (!$conv) {
         http_response_code(404);
-        echo json_encode(['error' => 'Conversation not found']);
+        echo json_encode(['error' => 'Переписку не знайдено']);
         exit;
     }
 
@@ -158,7 +158,7 @@ if ($action === 'propose') {
     $stmt->execute([$conversationId]);
     if ($stmt->fetch()) {
         http_response_code(409);
-        echo json_encode(['error' => 'В этой переписке уже есть предложенный или активный контракт']);
+        echo json_encode(['error' => 'У цій переписці вже є запропонований або активний контракт']);
         exit;
     }
 
@@ -176,7 +176,7 @@ if ($action === 'propose') {
         // Parent container — no price/escrow of its own; proposed until stage 1 is accepted.
         $db->prepare('
             INSERT INTO contracts (conversation_id, client_user_id, freelancer_user_id, offer_id, type, price, deadline, status, title)
-            VALUES (?, ?, ?, ?, "staged", 0, NULL, "proposed", "Поэтапный контракт")
+            VALUES (?, ?, ?, ?, "staged", 0, NULL, "proposed", "Поетапний контракт")
         ')->execute([$conversationId, $me['user_id'], $freelancerId, $offerId]);
         $contractId = (int) $db->lastInsertId();
         // Stage 1.
@@ -188,7 +188,7 @@ if ($action === 'propose') {
     }
 
     create_notification($db, $freelancerId, 'contract_proposed',
-        $type === 'staged' ? 'Вам предложили поэтапный контракт' : 'Вам предложили контракт');
+        $type === 'staged' ? 'Вам запропонували поетапний контракт' : 'Вам запропонували контракт');
 
     http_response_code(201);
     echo json_encode(['id' => $contractId]);
@@ -199,7 +199,7 @@ if ($action === 'propose') {
 if ($action === 'add_stage') {
     if ($me['role'] !== 'client') {
         http_response_code(403);
-        echo json_encode(['error' => 'Только клиент может сформировать этап']);
+        echo json_encode(['error' => 'Лише клієнт може сформувати етап']);
         exit;
     }
 
@@ -208,22 +208,22 @@ if ($action === 'add_stage') {
 
     if ($parent['type'] !== 'staged' || $parent['parent_contract_id'] !== null) {
         http_response_code(409);
-        echo json_encode(['error' => 'Этапы можно добавлять только в поэтапный контракт']);
+        echo json_encode(['error' => 'Етапи можна додавати лише в поетапний контракт']);
         exit;
     }
     if ($parent['status'] !== 'active') {
         http_response_code(409);
-        echo json_encode(['error' => 'Контракт не активен']);
+        echo json_encode(['error' => 'Контракт не активний']);
         exit;
     }
 
     $title    = trim($body['title'] ?? '');
     $price    = is_numeric($body['price'] ?? '') ? (float) $body['price'] : 0;
-    $deadline = validate_deadline($body['deadline'] ?? null, 'Срок этапа');
+    $deadline = validate_deadline($body['deadline'] ?? null, 'Термін етапу');
 
     if ($title === '' || $price <= 0) {
         http_response_code(422);
-        echo json_encode(['error' => 'Укажите название и цену этапа']);
+        echo json_encode(['error' => 'Вкажіть назву та ціну етапу']);
         exit;
     }
 
@@ -233,7 +233,7 @@ if ($action === 'add_stage') {
     $last = $stmt->fetch();
     if ($last && !in_array($last['status'], ['completed', 'failed', 'rejected'], true)) {
         http_response_code(409);
-        echo json_encode(['error' => 'Сначала завершите текущий этап']);
+        echo json_encode(['error' => 'Спершу завершіть поточний етап']);
         exit;
     }
     $nextSeq = $last ? ((int) $last['seq'] + 1) : 1;
@@ -248,7 +248,7 @@ if ($action === 'add_stage') {
     $stageId = (int) $db->lastInsertId();
 
     create_notification($db, (int) $parent['freelancer_user_id'], 'contract_proposed',
-        'Вам предложили этап ' . $nextSeq . ' по контракту #' . contract_number($parentId));
+        'Вам запропонували етап ' . $nextSeq . ' за контрактом #' . contract_number($parentId));
 
     http_response_code(201);
     echo json_encode(['id' => $stageId]);
@@ -259,7 +259,7 @@ if ($action === 'add_stage') {
 if ($action === 'accept' || $action === 'reject') {
     if ($me['role'] !== 'freelancer') {
         http_response_code(403);
-        echo json_encode(['error' => 'Только фрилансер может подтвердить или отклонить контракт']);
+        echo json_encode(['error' => 'Лише фрилансер може підтвердити або відхилити контракт']);
         exit;
     }
 
@@ -268,7 +268,7 @@ if ($action === 'accept' || $action === 'reject') {
 
     if ((int)$contract['freelancer_user_id'] !== $me['user_id'] || $contract['status'] !== 'proposed') {
         http_response_code(409);
-        echo json_encode(['error' => 'Контракт нельзя подтвердить или отклонить в текущем статусе']);
+        echo json_encode(['error' => 'Контракт не можна підтвердити або відхилити в поточному статусі']);
         exit;
     }
 
@@ -305,12 +305,12 @@ if ($action === 'accept' || $action === 'reject') {
            ->execute([$offerToBadge]);
     }
 
-    $label = $contract['parent_contract_id'] ? 'этап' : 'контракт';
+    $label = $contract['parent_contract_id'] ? 'етап' : 'контракт';
     create_notification(
         $db,
         (int)$contract['client_user_id'],
         $action === 'accept' ? 'contract_accepted' : 'contract_rejected',
-        $action === 'accept' ? "Фрилансер подтвердил $label" : "Фрилансер отклонил $label"
+        $action === 'accept' ? "Фрилансер підтвердив $label" : "Фрилансер відхилив $label"
     );
 
     echo json_encode(['success' => true, 'status' => $newStatus]);
@@ -321,7 +321,7 @@ if ($action === 'accept' || $action === 'reject') {
 if ($action === 'close') {
     if (!in_array($me['role'], ['client', 'freelancer'], true)) {
         http_response_code(403);
-        echo json_encode(['error' => 'Method not allowed for this role']);
+        echo json_encode(['error' => 'Дія недоступна для вашої ролі']);
         exit;
     }
 
@@ -329,27 +329,27 @@ if ($action === 'close') {
     $outcome    = $body['outcome'] ?? '';
     if (!in_array($outcome, ['success', 'failure'], true)) {
         http_response_code(422);
-        echo json_encode(['error' => 'outcome must be success or failure']);
+        echo json_encode(['error' => 'Результат: success або failure']);
         exit;
     }
 
     $contract = contract_or_404($db, $contractId, $me['user_id']);
     if ($contract['status'] !== 'active') {
         http_response_code(409);
-        echo json_encode(['error' => 'Контракт не активен']);
+        echo json_encode(['error' => 'Контракт не активний']);
         exit;
     }
 
     if ($me['role'] === 'client') {
         if ((int)$contract['client_user_id'] !== $me['user_id']) {
             http_response_code(403);
-            echo json_encode(['error' => 'Not your contract']);
+            echo json_encode(['error' => 'Це не ваш контракт']);
             exit;
         }
     } else {
         if ((int)$contract['freelancer_user_id'] !== $me['user_id']) {
             http_response_code(403);
-            echo json_encode(['error' => 'Not your contract']);
+            echo json_encode(['error' => 'Це не ваш контракт']);
             exit;
         }
         // Freelancer unilateral close only after 14 days of client silence.
@@ -361,7 +361,7 @@ if ($action === 'close') {
             && strtotime($lastMessage['created_at']) <= strtotime('-' . FREELANCER_CLOSE_SILENCE_DAYS . ' days');
         if (!$eligible) {
             http_response_code(403);
-            echo json_encode(['error' => 'Закрыть можно только если клиент не отвечает на ваше последнее сообщение ' . FREELANCER_CLOSE_SILENCE_DAYS . ' дней']);
+            echo json_encode(['error' => 'Закрити можна, лише якщо клієнт не відповідає на ваше останнє повідомлення ' . FREELANCER_CLOSE_SILENCE_DAYS . ' днів']);
             exit;
         }
     }
@@ -399,13 +399,13 @@ if ($action === 'close') {
     $db->commit();
 
     $otherUserId = $me['user_id'] === (int)$contract['client_user_id'] ? (int)$contract['freelancer_user_id'] : (int)$contract['client_user_id'];
-    $label = $contract['parent_contract_id'] ? 'Этап' : 'Контракт';
+    $label = $contract['parent_contract_id'] ? 'Етап' : 'Контракт';
     create_notification($db, $otherUserId, 'contract_closed',
-        "$label закрыт как " . ($outcome === 'success' ? 'выполненный' : 'невыполненный'));
+        "$label закрито як " . ($outcome === 'success' ? 'виконаний' : 'невиконаний'));
 
     echo json_encode(['success' => true]);
     exit;
 }
 
 http_response_code(400);
-echo json_encode(['error' => 'Unknown action']);
+echo json_encode(['error' => 'Невідома дія']);

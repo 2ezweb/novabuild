@@ -29,14 +29,14 @@ function require_auth(): array {
     $header = get_authorization_header();
     if (!str_starts_with($header, 'Bearer ')) {
         http_response_code(401);
-        echo json_encode(['error' => 'Unauthorized']);
+        echo json_encode(['error' => 'Потрібна авторизація']);
         exit;
     }
     $token = substr($header, 7);
     $payload = jwt_decode($token);
     if (!$payload) {
         http_response_code(401);
-        echo json_encode(['error' => 'Invalid or expired token']);
+        echo json_encode(['error' => 'Сесія недійсна або закінчилася — увійдіть знову']);
         exit;
     }
 
@@ -48,12 +48,12 @@ function require_auth(): array {
     $status = $stmt->fetchColumn();
     if ($status === false) {
         http_response_code(401);
-        echo json_encode(['error' => 'Unauthorized']);
+        echo json_encode(['error' => 'Потрібна авторизація']);
         exit;
     }
     if ($status === 'banned') {
         http_response_code(403);
-        echo json_encode(['error' => 'Аккаунт заблокирован. Обратитесь в поддержку.', 'banned' => true]);
+        echo json_encode(['error' => 'Акаунт заблоковано. Зверніться до підтримки.', 'banned' => true]);
         exit;
     }
     return $payload;
@@ -63,7 +63,7 @@ function require_admin(): array {
     $me = require_auth();
     if ($me['role'] !== 'admin') {
         http_response_code(403);
-        echo json_encode(['error' => 'Admins only']);
+        echo json_encode(['error' => 'Лише для адміністраторів']);
         exit;
     }
     return $me;

@@ -15,7 +15,7 @@ $me = require_auth();
 
 if ($me['role'] !== 'freelancer') {
     http_response_code(403);
-    echo json_encode(['error' => 'Вывод средств доступен только фрилансерам']);
+    echo json_encode(['error' => 'Виведення коштів доступне лише фрилансерам']);
     exit;
 }
 
@@ -44,14 +44,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($action !== 'request_withdrawal') {
         http_response_code(400);
-        echo json_encode(['error' => 'Unknown action']);
+        echo json_encode(['error' => 'Невідома дія']);
         exit;
     }
 
     $amount = is_numeric($body['amount'] ?? '') ? (float)$body['amount'] : 0;
     if ($amount < MIN_WITHDRAWAL) {
         http_response_code(422);
-        echo json_encode(['error' => 'Минимальная сумма вывода — ' . MIN_WITHDRAWAL . ' ₴']);
+        echo json_encode(['error' => 'Мінімальна сума виведення — ' . MIN_WITHDRAWAL . ' ₴']);
         exit;
     }
 
@@ -59,7 +59,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute([$me['user_id']]);
     if ($stmt->fetch()) {
         http_response_code(409);
-        echo json_encode(['error' => 'У вас уже есть заявка на вывод в обработке']);
+        echo json_encode(['error' => 'У вас уже є заявка на виведення в обробці']);
         exit;
     }
 
@@ -69,7 +69,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($amount > $balance) {
         http_response_code(422);
-        echo json_encode(['error' => 'Недостаточно средств на балансе']);
+        echo json_encode(['error' => 'Недостатньо коштів на балансі']);
         exit;
     }
 
@@ -89,4 +89,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+echo json_encode(['error' => 'Метод не підтримується']);

@@ -21,7 +21,7 @@ function contract_participant_or_404(PDO $db, int $contractId, int $userId): arr
     $c = $stmt->fetch();
     if (!$c || ((int)$c['client_user_id'] !== $userId && (int)$c['freelancer_user_id'] !== $userId)) {
         http_response_code(404);
-        echo json_encode(['error' => 'Contract not found']);
+        echo json_encode(['error' => 'Контракт не знайдено']);
         exit;
     }
     return $c;
@@ -44,7 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
@@ -58,21 +58,21 @@ if ($action === 'propose') {
 
     if ($contract['status'] !== 'active') {
         http_response_code(409);
-        echo json_encode(['error' => 'Изменения можно предлагать только для активного контракта']);
+        echo json_encode(['error' => 'Зміни можна пропонувати лише для активного контракту']);
         exit;
     }
     if ($contract['type'] === 'staged' && $contract['parent_contract_id'] === null) {
         http_response_code(409);
-        echo json_encode(['error' => 'Условия поэтапного контракта меняются по этапам, а не целиком']);
+        echo json_encode(['error' => 'Умови поетапного контракту змінюються по етапах, а не цілком']);
         exit;
     }
 
     $newPrice    = isset($body['new_price']) && is_numeric($body['new_price']) ? (float) $body['new_price'] : null;
-    $newDeadline = validate_deadline($body['new_deadline'] ?? null, 'Новый срок');
+    $newDeadline = validate_deadline($body['new_deadline'] ?? null, 'Новий термін');
 
     if ($newPrice === null && $newDeadline === null) {
         http_response_code(422);
-        echo json_encode(['error' => 'Укажите новую цену и/или срок']);
+        echo json_encode(['error' => 'Вкажіть нову ціну та/або термін']);
         exit;
     }
 
@@ -80,7 +80,7 @@ if ($action === 'propose') {
     $stmt->execute([$contractId]);
     if ($stmt->fetch()) {
         http_response_code(409);
-        echo json_encode(['error' => 'По этому контракту уже есть предложение на рассмотрении']);
+        echo json_encode(['error' => 'Щодо цього контракту вже є пропозиція на розгляді']);
         exit;
     }
 
@@ -91,7 +91,7 @@ if ($action === 'propose') {
     $stmt->execute([$contractId, $me['user_id'], $newPrice, $newDeadline]);
 
     $otherUserId = $me['user_id'] === (int)$contract['client_user_id'] ? (int)$contract['freelancer_user_id'] : (int)$contract['client_user_id'];
-    create_notification($db, $otherUserId, 'contract_change_proposed', 'Предложено изменение условий контракта #' . contract_number((int)$contract['id']));
+    create_notification($db, $otherUserId, 'contract_change_proposed', 'Запропоновано зміну умов контракту #' . contract_number((int)$contract['id']));
 
     http_response_code(201);
     echo json_encode(['id' => (int) $db->lastInsertId()]);
@@ -108,7 +108,7 @@ if ($action === 'respond') {
     $req = $stmt->fetch();
     if (!$req) {
         http_response_code(404);
-        echo json_encode(['error' => 'Request not found']);
+        echo json_encode(['error' => 'Запит не знайдено']);
         exit;
     }
 
@@ -116,12 +116,12 @@ if ($action === 'respond') {
 
     if ((int)$req['proposed_by'] === $me['user_id']) {
         http_response_code(403);
-        echo json_encode(['error' => 'Нельзя подтвердить своё же предложение']);
+        echo json_encode(['error' => 'Не можна підтвердити власну пропозицію']);
         exit;
     }
     if ($req['status'] !== 'pending') {
         http_response_code(409);
-        echo json_encode(['error' => 'Предложение уже обработано']);
+        echo json_encode(['error' => 'Пропозицію вже оброблено']);
         exit;
     }
 
@@ -145,7 +145,7 @@ if ($action === 'respond') {
         $db,
         (int)$req['proposed_by'],
         'contract_change_' . ($accept ? 'accepted' : 'rejected'),
-        ($accept ? 'Изменение условий контракта принято' : 'Изменение условий контракта отклонено')
+        ($accept ? 'Зміну умов контракту прийнято' : 'Зміну умов контракту відхилено')
             . ' — #' . contract_number((int)$req['contract_id'])
     );
 
@@ -154,4 +154,4 @@ if ($action === 'respond') {
 }
 
 http_response_code(400);
-echo json_encode(['error' => 'Unknown action']);
+echo json_encode(['error' => 'Невідома дія']);

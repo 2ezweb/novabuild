@@ -14,7 +14,7 @@ $me = require_auth();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
@@ -24,7 +24,7 @@ $socketId    = $_POST['socket_id'] ?? '';
 
 if (!preg_match('/^private-conversation-(\d+)$/', $channelName, $m)) {
     http_response_code(403);
-    echo json_encode(['error' => 'Unknown channel']);
+    echo json_encode(['error' => 'Невідомий канал']);
     exit;
 }
 $conversationId = (int) $m[1];
@@ -36,14 +36,14 @@ $conv = $stmt->fetch();
 
 if (!$conv || ((int)$conv['client_user_id'] !== $me['user_id'] && (int)$conv['freelancer_user_id'] !== $me['user_id'])) {
     http_response_code(403);
-    echo json_encode(['error' => 'Not a participant of this conversation']);
+    echo json_encode(['error' => 'Ви не є учасником цієї переписки']);
     exit;
 }
 
 $auth = pusher_channel_auth($socketId, $channelName);
 if (!$auth) {
     http_response_code(503);
-    echo json_encode(['error' => 'Realtime not configured']);
+    echo json_encode(['error' => 'Realtime не налаштовано']);
     exit;
 }
 

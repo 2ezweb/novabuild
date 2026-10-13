@@ -23,7 +23,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $contract = $stmt->fetch();
     if (!$contract || ((int)$contract['client_user_id'] !== $me['user_id'] && (int)$contract['freelancer_user_id'] !== $me['user_id'])) {
         http_response_code(404);
-        echo json_encode(['error' => 'Contract not found']);
+        echo json_encode(['error' => 'Контракт не знайдено']);
         exit;
     }
 
@@ -35,13 +35,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
 if ($me['role'] !== 'freelancer') {
     http_response_code(403);
-    echo json_encode(['error' => 'Оспорить закрытие может только фрилансер']);
+    echo json_encode(['error' => 'Оскаржити закриття може лише фрилансер']);
     exit;
 }
 
@@ -50,7 +50,7 @@ $action = $body['action'] ?? '';
 
 if ($action !== 'raise') {
     http_response_code(400);
-    echo json_encode(['error' => 'Unknown action']);
+    echo json_encode(['error' => 'Невідома дія']);
     exit;
 }
 
@@ -61,7 +61,7 @@ $stmt->execute([$contractId]);
 $contract = $stmt->fetch();
 if (!$contract || (int)$contract['freelancer_user_id'] !== $me['user_id']) {
     http_response_code(404);
-    echo json_encode(['error' => 'Contract not found']);
+    echo json_encode(['error' => 'Контракт не знайдено']);
     exit;
 }
 
@@ -75,12 +75,12 @@ $hold = $stmt->fetch();
 
 if (!$hold) {
     http_response_code(409);
-    echo json_encode(['error' => 'Нет активной заморозки по этому контракту, которую можно оспорить (либо срок истёк, либо спор уже подан)']);
+    echo json_encode(['error' => 'Немає активного заморожування за цим контрактом, яке можна оскаржити (або термін минув, або спір уже подано)']);
     exit;
 }
 
 $db->prepare('UPDATE balance_holds SET disputed_at = NOW() WHERE id = ?')->execute([$hold['id']]);
 
-notify_admins($db, 'contract_disputed', 'Фрилансер оспорил закрытие контракта #' . contract_number($contractId));
+notify_admins($db, 'contract_disputed', 'Фрилансер оскаржив закриття контракту #' . contract_number($contractId));
 
 echo json_encode(['success' => true]);

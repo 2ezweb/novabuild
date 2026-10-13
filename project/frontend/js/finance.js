@@ -28,7 +28,7 @@ function selectPeriod(btn) {
 async function loadReport() {
   hideError('finance-error');
   const wrap = document.getElementById('finance-chart-wrap');
-  wrap.innerHTML = '<p class="text-muted mb-0">Загрузка...</p>';
+  wrap.innerHTML = '<p class="text-muted mb-0">Завантаження...</p>';
 
   try {
     const res = await apiFetch(`/finance.php?period=${currentPeriod}`);
@@ -56,7 +56,7 @@ function renderReport() {
   if (!hasData) {
     wrap.innerHTML = `<div class="text-center text-muted py-5">
       <div class="fs-1 mb-2">📊</div>
-      <p class="mb-0">Операций пока нет за выбранный период.</p>
+      <p class="mb-0">За обраний період операцій поки немає.</p>
     </div>`;
     tableLink.style.display = 'none';
     document.getElementById('finance-table-wrap').innerHTML = '';
@@ -71,7 +71,7 @@ function renderReport() {
 
 function toggleTable() {
   tableVisible = !tableVisible;
-  document.getElementById('toggle-table-link').textContent = tableVisible ? 'Скрыть таблицу' : 'Показать таблицу';
+  document.getElementById('toggle-table-link').textContent = tableVisible ? 'Сховати таблицю' : 'Показати таблицю';
   renderTableIfVisible();
 }
 
@@ -90,14 +90,14 @@ function buildTable(points) {
   return `
     <div class="table-responsive mt-2">
       <table class="table table-sm">
-        <thead><tr><th>Период</th><th>${esc(inLabel)}</th><th>${esc(outLabel)}</th></tr></thead>
+        <thead><tr><th>Період</th><th>${esc(inLabel)}</th><th>${esc(outLabel)}</th></tr></thead>
         <tbody>${rows}</tbody>
       </table>
     </div>`;
 }
 
 // ─── LABEL FORMATTING ─────────────────────────────────────────────────────────
-const MONTH_ABBR = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const MONTH_ABBR = ['січ', 'лют', 'бер', 'кві', 'тра', 'чер', 'лип', 'сер', 'вер', 'жов', 'лис', 'гру'];
 
 function bucketLabel(bucket) {
   if (currentPeriod === 'month') {
@@ -150,7 +150,7 @@ function buildChart(points) {
     viewBox: `0 0 ${CHART_W} ${CHART_H}`,
     class: 'finance-chart-svg',
     role: 'img',
-    'aria-label': 'График операций по выбранному периоду',
+    'aria-label': 'Графік операцій за обраний період',
   });
 
   // gridlines + y labels
@@ -236,7 +236,7 @@ function buildChart(points) {
       if (p.transactions.length > 5) {
         const more = document.createElement('div');
         more.className = 'small text-muted fst-italic';
-        more.textContent = `+ ещё ${p.transactions.length - 5}`;
+        more.textContent = `+ ще ${p.transactions.length - 5}`;
         tooltip.appendChild(more);
       }
     }

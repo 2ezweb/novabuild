@@ -24,21 +24,21 @@ async function loadProfile() {
 
     renderAvatarEl(document.getElementById('fp-avatar'), name, f.avatar_path);
     document.getElementById('fp-name').innerHTML = `${esc(name)} ${roleBadgeHtml(f)}`;
-    document.getElementById('fp-specialization').textContent = f.specialization || 'Специализация не указана';
-    document.getElementById('fp-about').textContent = f.about || 'Фрилансер пока не заполнил описание профиля.';
+    document.getElementById('fp-specialization').textContent = f.specialization || 'Спеціалізацію не вказано';
+    document.getElementById('fp-about').textContent = f.about || 'Фрилансер поки не заповнив опис профілю.';
 
     document.getElementById('fp-rating').innerHTML =
-      `${ratingBadgeHtml(f.rating_avg, f.rating_count)} <span class="text-muted small">· выполнено контрактов: ${Number(f.completed_contracts) || 0}</span>`;
+      `${ratingBadgeHtml(f.rating_avg, f.rating_count)} <span class="text-muted small">· виконано контрактів: ${Number(f.completed_contracts) || 0}</span>`;
     document.getElementById('fp-reviews').innerHTML = (f.reviews || []).length
       ? f.reviews.map(r => `
           <div class="border rounded p-2 mb-2">
             <div class="d-flex justify-content-between small">
-              <span>${starsHtml(r.rating)} <span class="ms-1">${esc(r.client_first_name || 'Клиент')}</span></span>
+              <span>${starsHtml(r.rating)} <span class="ms-1">${esc(r.client_first_name || 'Клієнт')}</span></span>
               <span class="text-muted">${esc(timeAgo(r.created_at))}</span>
             </div>
             ${r.comment ? `<div class="small mt-1" style="white-space:pre-wrap">${esc(r.comment)}</div>` : ''}
           </div>`).join('')
-      : '<p class="text-muted small">Отзывов пока нет.</p>';
+      : '<p class="text-muted small">Відгуків поки немає.</p>';
 
     document.getElementById('profile-content').classList.remove('d-none');
   } catch (e) {

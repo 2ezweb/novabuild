@@ -27,7 +27,7 @@ function contract_participant_or_404(PDO $db, int $contractId, int $userId): arr
     $c = $stmt->fetch();
     if (!$c || ((int)$c['client_user_id'] !== $userId && (int)$c['freelancer_user_id'] !== $userId)) {
         http_response_code(404);
-        echo json_encode(['error' => 'Contract not found']);
+        echo json_encode(['error' => 'Контракт не знайдено']);
         exit;
     }
     return $c;
@@ -46,7 +46,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
@@ -55,7 +55,7 @@ $action = $body['action'] ?? '';
 
 if ($action !== 'raise') {
     http_response_code(400);
-    echo json_encode(['error' => 'Unknown action']);
+    echo json_encode(['error' => 'Невідома дія']);
     exit;
 }
 
@@ -64,12 +64,12 @@ $contract   = contract_participant_or_404($db, $contractId, $me['user_id']);
 
 if ($contract['status'] !== 'active') {
     http_response_code(409);
-    echo json_encode(['error' => 'Обратиться к администрации можно только по активному контракту или этапу']);
+    echo json_encode(['error' => 'Звернутися до адміністрації можна лише щодо активного контракту або етапу']);
     exit;
 }
 if ($contract['type'] === 'staged' && $contract['parent_contract_id'] === null) {
     http_response_code(409);
-    echo json_encode(['error' => 'Обращение оформляется по конкретному этапу, а не по всему поэтапному контракту']);
+    echo json_encode(['error' => 'Звернення оформлюється щодо конкретного етапу, а не всього поетапного контракту']);
     exit;
 }
 
@@ -77,22 +77,22 @@ $stmt = $db->prepare("SELECT id FROM admin_escalations WHERE contract_id = ? AND
 $stmt->execute([$contractId]);
 if ($stmt->fetch()) {
     http_response_code(409);
-    echo json_encode(['error' => 'Обращение по этому контракту уже отправлено, дождитесь решения администрации']);
+    echo json_encode(['error' => 'Звернення щодо цього контракту вже надіслано, дочекайтеся рішення адміністрації']);
     exit;
 }
 
 $reason = trim($body['reason'] ?? '');
 if ($reason === '') {
     http_response_code(422);
-    echo json_encode(['error' => 'Опишите суть конфликта']);
+    echo json_encode(['error' => 'Опишіть суть конфлікту']);
     exit;
 }
 
 $stmt = $db->prepare('INSERT INTO admin_escalations (contract_id, raised_by_user_id, reason) VALUES (?, ?, ?)');
 $stmt->execute([$contractId, $me['user_id'], $reason]);
 
-$noun = $contract['parent_contract_id'] ? 'этапу' : 'контракту';
-notify_admins($db, 'escalation_raised', 'Обращение по ' . $noun . ' #' . contract_number($contractId));
+$noun = $contract['parent_contract_id'] ? 'етапу' : 'контракту';
+notify_admins($db, 'escalation_raised', 'Звернення щодо ' . $noun . ' #' . contract_number($contractId));
 
 http_response_code(201);
 echo json_encode(['id' => (int) $db->lastInsertId()]);

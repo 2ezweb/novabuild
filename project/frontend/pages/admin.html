@@ -1,13 +1,13 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uk">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Админка — NovaBuild</title>
+  <title>Адмінка — NovaBuild</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="../css/common.css?v=20">
-  <link rel="stylesheet" href="../css/dashboard.css?v=20">
-  <link rel="stylesheet" href="../css/admin.css?v=20">
+  <link rel="stylesheet" href="../css/common.css?v=21">
+  <link rel="stylesheet" href="../css/dashboard.css?v=21">
+  <link rel="stylesheet" href="../css/admin.css?v=21">
 </head>
 <body>
 
@@ -19,12 +19,12 @@
   </div>
   <div class="d-flex align-items-center gap-2">
     <div class="dropdown">
-      <button class="btn btn-outline-light rounded-circle avatar-btn position-relative" type="button" id="nav-bell" data-bs-toggle="dropdown" aria-expanded="false" title="Уведомления">
+      <button class="btn btn-outline-light rounded-circle avatar-btn position-relative" type="button" id="nav-bell" data-bs-toggle="dropdown" aria-expanded="false" title="Сповіщення">
         🔔
         <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger rounded-circle" id="bell-dot" style="display:none"></span>
       </button>
       <div class="dropdown-menu dropdown-menu-end p-0 notifications-dropdown" id="notifications-list">
-        <div class="text-muted small p-3 text-center">Загрузка...</div>
+        <div class="text-muted small p-3 text-center">Завантаження...</div>
       </div>
     </div>
     <div class="dropdown">
@@ -32,8 +32,8 @@
       <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-avatar">
         <li><span class="dropdown-item-text small text-muted" id="nav-email"></span></li>
         <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="cabinet.html">Профиль</a></li>
-        <li><a class="dropdown-item" href="#" onclick="logout()">Выйти</a></li>
+        <li><a class="dropdown-item" href="cabinet.html">Профіль</a></li>
+        <li><a class="dropdown-item" href="#" onclick="logout()">Вийти</a></li>
       </ul>
     </div>
   </div>
@@ -44,28 +44,28 @@
     <div class="col-lg-8 order-2 order-lg-1">
 
       <div id="admin-section-users">
-        <h5 class="fw-semibold mb-3">Все пользователи</h5>
-        <div id="admin-users-list"><p class="text-muted">Загрузка...</p></div>
+        <h5 class="fw-semibold mb-3">Усі користувачі</h5>
+        <div id="admin-users-list"><p class="text-muted">Завантаження...</p></div>
       </div>
 
       <div id="admin-section-requests" style="display:none">
-        <h5 class="fw-semibold mb-3">Заявки на верификацию</h5>
-        <div id="admin-requests-list"><p class="text-muted">Загрузка...</p></div>
+        <h5 class="fw-semibold mb-3">Заявки на верифікацію</h5>
+        <div id="admin-requests-list"><p class="text-muted">Завантаження...</p></div>
       </div>
 
       <div id="admin-section-withdrawals" style="display:none">
-        <h5 class="fw-semibold mb-3">Заявки на вывод средств</h5>
-        <div id="admin-withdrawals-list"><p class="text-muted">Загрузка...</p></div>
+        <h5 class="fw-semibold mb-3">Заявки на виведення коштів</h5>
+        <div id="admin-withdrawals-list"><p class="text-muted">Завантаження...</p></div>
       </div>
 
       <div id="admin-section-disputes" style="display:none">
-        <h5 class="fw-semibold mb-3">Спорные контракты</h5>
-        <div id="admin-disputes-list"><p class="text-muted">Загрузка...</p></div>
+        <h5 class="fw-semibold mb-3">Спірні контракти</h5>
+        <div id="admin-disputes-list"><p class="text-muted">Завантаження...</p></div>
       </div>
 
       <div id="admin-section-escalations" style="display:none">
-        <h5 class="fw-semibold mb-3">Обращения к администрации</h5>
-        <div id="admin-escalations-list"><p class="text-muted">Загрузка...</p></div>
+        <h5 class="fw-semibold mb-3">Звернення до адміністрації</h5>
+        <div id="admin-escalations-list"><p class="text-muted">Завантаження...</p></div>
       </div>
 
     </div>
@@ -78,27 +78,27 @@
             <div class="fw-semibold sidebar-name">—</div>
           </div>
         </div>
-        <a href="cabinet.html" class="btn btn-sm btn-outline-secondary w-100 mt-3">Редактировать профиль</a>
+        <a href="cabinet.html" class="btn btn-sm btn-outline-secondary w-100 mt-3">Редагувати профіль</a>
       </div>
       <div class="card p-0">
         <div class="list-group list-group-flush">
           <button class="list-group-item list-group-item-action active" id="nav-users-btn" onclick="showSection('users')">
-            👥 Все пользователи
+            👥 Усі користувачі
           </button>
           <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" id="nav-requests-btn" onclick="showSection('requests')">
-            📋 Заявки на верификацию
+            📋 Заявки на верифікацію
             <span class="badge bg-danger rounded-pill" id="requests-count" style="display:none"></span>
           </button>
           <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" id="nav-withdrawals-btn" onclick="showSection('withdrawals')">
-            💸 Заявки на вывод средств
+            💸 Заявки на виведення коштів
             <span class="badge bg-danger rounded-pill" id="withdrawals-count" style="display:none"></span>
           </button>
           <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" id="nav-disputes-btn" onclick="showSection('disputes')">
-            ⚖️ Спорные контракты
+            ⚖️ Спірні контракти
             <span class="badge bg-danger rounded-pill" id="disputes-count" style="display:none"></span>
           </button>
           <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center" id="nav-escalations-btn" onclick="showSection('escalations')">
-            🛎 Обращения к администрации
+            🛎 Звернення до адміністрації
             <span class="badge bg-danger rounded-pill" id="escalations-count" style="display:none"></span>
           </button>
         </div>
@@ -112,7 +112,7 @@
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-bold">Документ заявителя</h5>
+        <h5 class="modal-title fw-bold">Документ заявника</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body text-center" id="document-viewer"></div>
@@ -125,22 +125,22 @@
   <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-bold">Обращение к администрации</h5>
+        <h5 class="modal-title fw-bold">Звернення до адміністрації</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div id="escalation-detail-error" class="alert alert-danger d-none"></div>
-        <div id="escalation-detail-body"><p class="text-muted">Загрузка...</p></div>
+        <div id="escalation-detail-body"><p class="text-muted">Завантаження...</p></div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>
       </div>
     </div>
   </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-<script src="../js/common.js?v=20"></script>
-<script src="../js/admin.js?v=20"></script>
+<script src="../js/common.js?v=21"></script>
+<script src="../js/admin.js?v=21"></script>
 </body>
 </html>

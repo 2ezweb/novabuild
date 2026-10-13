@@ -38,21 +38,21 @@ function renderAvatarEl(el, name, avatarPath) {
 
 // Small badge shown next to a display name: gold for admin, green check for verified peers.
 function roleBadgeHtml(me) {
-  if (me.role === 'admin') return '<span class="badge badge-admin ms-1">★ Админ</span>';
+  if (me.role === 'admin') return '<span class="badge badge-admin ms-1">★ Адмін</span>';
   if (me.verification_status === 'verified') return '<span class="badge bg-success ms-1">✓</span>';
   return '';
 }
 
 function timeAgo(mysqlDatetime) {
   const diffMin = Math.floor((Date.now() - new Date(mysqlDatetime.replace(' ', 'T')).getTime()) / 60000);
-  if (diffMin < 1)   return 'только что';
-  if (diffMin < 60)  return `${diffMin} мин назад`;
+  if (diffMin < 1)   return 'щойно';
+  if (diffMin < 60)  return `${diffMin} хв тому`;
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24)   return `${diffHr} ч назад`;
+  if (diffHr < 24)   return `${diffHr} год тому`;
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay === 1) return 'вчера';
-  if (diffDay < 30)  return `${diffDay} дн назад`;
-  return `${Math.floor(diffDay / 30)} мес назад`;
+  if (diffDay === 1) return 'учора';
+  if (diffDay < 30)  return `${diffDay} дн тому`;
+  return `${Math.floor(diffDay / 30)} міс тому`;
 }
 
 function showError(id, msg) {
@@ -66,7 +66,7 @@ function hideError(id) {
 
 // ─── API HELPERS ──────────────────────────────────────────────────────────────
 function apiError(data) {
-  return Object.assign(new Error(data.error || 'Server error'), data);
+  return Object.assign(new Error(data.error || 'Помилка сервера'), data);
 }
 
 async function apiFetch(path) {
@@ -162,7 +162,7 @@ function fileIcon(mime) {
 function renderAttachments(container, attachments) {
   container.innerHTML = attachments.length
     ? attachmentsHtml(attachments)
-    : '<p class="text-muted small mb-0">Файлов нет.</p>';
+    : '<p class="text-muted small mb-0">Файлів немає.</p>';
 }
 
 // Same, as an HTML string — for templates (work hand-over, chat bubbles). '' when empty.
@@ -197,12 +197,12 @@ const UPLOAD_MAX_FILES_COUNT = 10;
 // Returns an error message, or null when the selection is OK.
 function checkUploadSelection(fileList) {
   const files = Array.from(fileList || []);
-  if (files.length > UPLOAD_MAX_FILES_COUNT) return `Не больше ${UPLOAD_MAX_FILES_COUNT} файлов за раз`;
+  if (files.length > UPLOAD_MAX_FILES_COUNT) return `Не більше ${UPLOAD_MAX_FILES_COUNT} файлів за раз`;
   const allowed = UPLOAD_ACCEPT.split(',');
   for (const f of files) {
     const ext = '.' + (f.name.split('.').pop() || '').toLowerCase();
-    if (!allowed.includes(ext)) return `«${f.name}»: допустимы только png/jpg/pdf/docx/xlsx`;
-    if (f.size > UPLOAD_MAX_FILE_MB * 1024 * 1024) return `«${f.name}» больше ${UPLOAD_MAX_FILE_MB} МБ`;
+    if (!allowed.includes(ext)) return `«${f.name}»: дозволені лише png/jpg/pdf/docx/xlsx`;
+    if (f.size > UPLOAD_MAX_FILE_MB * 1024 * 1024) return `«${f.name}» більший за ${UPLOAD_MAX_FILE_MB} МБ`;
   }
   return null;
 }
@@ -263,7 +263,7 @@ async function requireAuth() {
     const homeLink = document.getElementById('nav-home-link');
     if (homeLink) {
       homeLink.href = homeHref;
-      homeLink.textContent = me.role === 'admin' ? 'Админка' : 'Дашборд';
+      homeLink.textContent = me.role === 'admin' ? 'Адмінка' : 'Дашборд';
     }
     const isClientOrFreelancer = me.role === 'client' || me.role === 'freelancer';
     const workLink = document.getElementById('nav-work-link');
@@ -294,9 +294,9 @@ function setVerificationBadge(status) {
       return;
     }
     const map = {
-      verified: ['bg-success', '✓ Верифицирован'],
-      pending:  ['bg-warning text-dark', '⏳ На проверке'],
-      rejected: ['bg-danger', '✗ Отклонено'],
+      verified: ['bg-success', '✓ Верифіковано'],
+      pending:  ['bg-warning text-dark', '⏳ На перевірці'],
+      rejected: ['bg-danger', '✗ Відхилено'],
     };
     const [cls, label] = map[status] ?? map.pending;
     badge.className = `badge verification-badge ${cls}`;
@@ -322,7 +322,7 @@ async function loadNotifications() {
     if (dot) dot.style.display = items.some(n => !n.is_read) ? '' : 'none';
 
     if (!items.length) {
-      list.innerHTML = '<div class="text-muted small p-3 text-center">Уведомлений нет</div>';
+      list.innerHTML = '<div class="text-muted small p-3 text-center">Сповіщень немає</div>';
       return;
     }
     list.innerHTML = items.map(n => `
@@ -386,27 +386,27 @@ document.addEventListener('focusin', (e) => {
 // ─── RATING (reviews.php / freelancer_profile.php / bids.php) ────────────────
 function starsHtml(rating) {
   const r = Math.round(Number(rating) || 0);
-  return `<span class="text-warning" title="${r} из 5">${'★'.repeat(r)}</span><span class="text-muted">${'☆'.repeat(5 - r)}</span>`;
+  return `<span class="text-warning" title="${r} з 5">${'★'.repeat(r)}</span><span class="text-muted">${'☆'.repeat(5 - r)}</span>`;
 }
 
 // Compact "★ 4.7 (12)" badge; "нет отзывов" when count is 0.
 function ratingBadgeHtml(avg, count) {
   count = Number(count) || 0;
-  if (!count) return '<span class="text-muted small">нет отзывов</span>';
+  if (!count) return '<span class="text-muted small">немає відгуків</span>';
   const a = Number(avg).toLocaleString('uk-UA', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
   return `<span class="small"><span class="text-warning">★</span> ${a} <span class="text-muted">(${count})</span></span>`;
 }
 
 // Client balance can't be withdrawn by the client — shown in the deposit modal,
 // cabinet balance block and dashboard sidebar.
-const CLIENT_WITHDRAW_NOTICE = 'Вывод денег для клиента возможно осуществить только с помощью технической поддержки. Обратитесь в поддержку если у Вас возникли проблемы.';
+const CLIENT_WITHDRAW_NOTICE = 'Виведення коштів для клієнта можливе лише через технічну підтримку. Зверніться до підтримки, якщо у Вас виникли проблеми.';
 
 function formatUAH(n) {
   return '₴ ' + Number(n || 0).toLocaleString('uk-UA');
 }
 
 function statusLabel(s) {
-  return { open: 'Открыт', in_progress: 'В работе', closed: 'Закрыт' }[s] ?? s;
+  return { open: 'Відкритий', in_progress: 'В роботі', closed: 'Закритий' }[s] ?? s;
 }
 
 function emptyState(msg) {

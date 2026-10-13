@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $escalation = $stmt->fetch();
         if (!$escalation) {
             http_response_code(404);
-            echo json_encode(['error' => 'Обращение не найдено']);
+            echo json_encode(['error' => 'Звернення не знайдено']);
             exit;
         }
 
@@ -116,7 +116,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $contract = $stmt->fetch();
         if (!$contract) {
             http_response_code(404);
-            echo json_encode(['error' => 'Контракт не найден']);
+            echo json_encode(['error' => 'Контракт не знайдено']);
             exit;
         }
         $contract['number'] = contract_number((int) $contract['id']);
@@ -194,14 +194,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         if (!$path) {
             http_response_code(404);
-            echo json_encode(['error' => 'Document not found']);
+            echo json_encode(['error' => 'Документ не знайдено']);
             exit;
         }
 
         $fullPath = __DIR__ . '/../' . $path;
         if (!is_file($fullPath)) {
             http_response_code(404);
-            echo json_encode(['error' => 'Document not found']);
+            echo json_encode(['error' => 'Документ не знайдено']);
             exit;
         }
 
@@ -216,7 +216,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     }
 
     http_response_code(400);
-    echo json_encode(['error' => 'Unknown action']);
+    echo json_encode(['error' => 'Невідома дія']);
     exit;
 }
 
@@ -231,7 +231,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$holdId || !in_array($resolution, ['to_client', 'to_freelancer'], true)) {
             http_response_code(422);
-            echo json_encode(['error' => 'hold_id и resolution (to_client|to_freelancer) обязательны']);
+            echo json_encode(['error' => 'hold_id та resolution (to_client|to_freelancer) обов\'язкові']);
             exit;
         }
 
@@ -246,12 +246,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$hold) {
             http_response_code(404);
-            echo json_encode(['error' => 'Заморозка не найдена']);
+            echo json_encode(['error' => 'Заморожування не знайдено']);
             exit;
         }
         if ($hold['resolution'] !== 'pending') {
             http_response_code(409);
-            echo json_encode(['error' => 'Спор уже решён']);
+            echo json_encode(['error' => 'Спір уже вирішено']);
             exit;
         }
 
@@ -264,11 +264,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                ->execute([$hold['amount'], $hold['freelancer_user_id']]);
             $db->prepare("
                 INSERT INTO wallet_transactions (user_id, type, amount, description, related_contract_id)
-                VALUES (?, 'contract_payment', ?, 'По решению спора', ?)
+                VALUES (?, 'contract_payment', ?, 'За рішенням спору', ?)
             ")->execute([$hold['client_user_id'], $hold['amount'], $hold['contract_id']]);
             $db->prepare("
                 INSERT INTO wallet_transactions (user_id, type, amount, description, related_contract_id)
-                VALUES (?, 'contract_earning', ?, 'По решению спора', ?)
+                VALUES (?, 'contract_earning', ?, 'За рішенням спору', ?)
             ")->execute([$hold['freelancer_user_id'], $hold['amount'], $hold['contract_id']]);
         }
 
@@ -283,13 +283,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db,
             $resolution === 'to_freelancer' ? (int)$hold['freelancer_user_id'] : (int)$hold['client_user_id'],
             'dispute_resolved',
-            'Спор по контракту #' . contract_number((int)$hold['contract_id']) . ' решён в вашу пользу'
+            'Спір щодо контракту #' . contract_number((int)$hold['contract_id']) . ' вирішено на вашу користь'
         );
         create_notification(
             $db,
             $resolution === 'to_freelancer' ? (int)$hold['client_user_id'] : (int)$hold['freelancer_user_id'],
             'dispute_resolved',
-            'Спор по контракту #' . contract_number((int)$hold['contract_id']) . ' решён не в вашу пользу'
+            'Спір щодо контракту #' . contract_number((int)$hold['contract_id']) . ' вирішено не на вашу користь'
         );
 
         echo json_encode(['success' => true]);
@@ -307,7 +307,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!in_array($resolution, ['terms_changed', 'closed_success', 'closed_failure', 'frozen'], true)) {
             http_response_code(422);
-            echo json_encode(['error' => 'Некорректный тип решения']);
+            echo json_encode(['error' => 'Некоректний тип рішення']);
             exit;
         }
 
@@ -316,12 +316,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $escalation = $stmt->fetch();
         if (!$escalation) {
             http_response_code(404);
-            echo json_encode(['error' => 'Обращение не найдено']);
+            echo json_encode(['error' => 'Звернення не знайдено']);
             exit;
         }
         if ($escalation['status'] !== 'open') {
             http_response_code(409);
-            echo json_encode(['error' => 'Обращение уже рассмотрено']);
+            echo json_encode(['error' => 'Звернення вже розглянуто']);
             exit;
         }
 
@@ -330,25 +330,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $contract = $stmt->fetch();
         if (!$contract) {
             http_response_code(404);
-            echo json_encode(['error' => 'Контракт не найден']);
+            echo json_encode(['error' => 'Контракт не знайдено']);
             exit;
         }
         if ($contract['status'] !== 'active') {
             http_response_code(409);
-            echo json_encode(['error' => 'Контракт уже не активен — решение больше не применимо']);
+            echo json_encode(['error' => 'Контракт уже не активний — рішення більше не застосовне']);
             exit;
         }
 
-        $noun    = $contract['parent_contract_id'] ? 'этапу' : 'контракту';
+        $noun    = $contract['parent_contract_id'] ? 'етапу' : 'контракту'; // родовий: «умови етапу»
+        $nounAcc = $contract['parent_contract_id'] ? 'етап' : 'контракт';   // знахідний: «закрила етап»
         $number  = contract_number((int) $contract['id']);
         $message = null;
 
         if ($resolution === 'terms_changed') {
             $newPrice    = isset($body['new_price']) && is_numeric($body['new_price']) ? (float) $body['new_price'] : null;
-            $newDeadline = validate_deadline($body['new_deadline'] ?? null, 'Новый срок');
+            $newDeadline = validate_deadline($body['new_deadline'] ?? null, 'Новий термін');
             if ($newPrice === null && $newDeadline === null) {
                 http_response_code(422);
-                echo json_encode(['error' => 'Укажите новую цену и/или срок']);
+                echo json_encode(['error' => 'Вкажіть нову ціну та/або термін']);
                 exit;
             }
 
@@ -361,9 +362,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $db->prepare('UPDATE contracts SET ' . implode(', ', $fields) . ' WHERE id = ?')->execute($params);
 
             $parts = [];
-            if ($newPrice !== null)    $parts[] = 'цена → ' . $newPrice . ' ₴';
-            if ($newDeadline !== null) $parts[] = 'срок → ' . $newDeadline;
-            $message = "Администрация изменила условия $noun #$number: " . implode(', ', $parts) . '.';
+            if ($newPrice !== null)    $parts[] = 'ціна → ' . $newPrice . ' ₴';
+            if ($newDeadline !== null) $parts[] = 'термін → ' . $newDeadline;
+            $message = "Адміністрація змінила умови $noun #$number: " . implode(', ', $parts) . '.';
         } elseif ($resolution === 'closed_success' || $resolution === 'closed_failure') {
             $db->beginTransaction();
             if ($resolution === 'closed_success') {
@@ -371,18 +372,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 settle_pending_submissions($db, (int)$contract['id'], true);
                 $db->prepare("UPDATE contracts SET status = 'completed', escrowed_amount = 0, frozen_at = NULL WHERE id = ?")
                    ->execute([$contract['id']]);
-                $message = "Администрация закрыла $noun #$number как выполненный, оплата переведена фрилансеру.";
+                $message = "Адміністрація закрила $nounAcc #$number як виконаний, оплату переведено фрилансеру.";
             } else {
                 refund_with_hold($db, $contract);
                 settle_pending_submissions($db, (int)$contract['id'], false);
                 $db->prepare("UPDATE contracts SET status = 'failed', escrowed_amount = 0, frozen_at = NULL WHERE id = ?")
                    ->execute([$contract['id']]);
-                $message = "Администрация закрыла $noun #$number как невыполненный, депозит возвращён клиенту (с холдом на " . CONTRACT_HOLD_DAYS . ' дней).';
+                $message = "Адміністрація закрила $nounAcc #$number як невиконаний, депозит повернуто клієнту (з холдом на " . CONTRACT_HOLD_DAYS . ' днів).';
             }
             $db->commit();
         } else { // frozen — stub: no ticket/investigation system yet, just the flag + notice
             $db->prepare('UPDATE contracts SET frozen_at = NOW() WHERE id = ?')->execute([$contract['id']]);
-            $message = "Администрация заморозила $noun #$number до выяснения обстоятельств. Открыт тикет в поддержку, будет проведено внутрибиржевое расследование.";
+            $message = "Адміністрація заморозила $nounAcc #$number до з'ясування обставин. Відкрито тікет у підтримку, буде проведено внутрішнє розслідування біржі.";
         }
 
         $db->prepare("
@@ -402,7 +403,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $requestId = (int)($body['request_id'] ?? 0);
         if (!$requestId) {
             http_response_code(422);
-            echo json_encode(['error' => 'request_id is required']);
+            echo json_encode(['error' => 'Не вказано запит (request_id)']);
             exit;
         }
 
@@ -412,12 +413,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$wr) {
             http_response_code(404);
-            echo json_encode(['error' => 'Заявка не найдена']);
+            echo json_encode(['error' => 'Заявку не знайдено']);
             exit;
         }
         if ($wr['status'] !== 'pending') {
             http_response_code(409);
-            echo json_encode(['error' => 'Заявка уже обработана']);
+            echo json_encode(['error' => 'Заявку вже оброблено']);
             exit;
         }
 
@@ -427,15 +428,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // logs it so it shows up in the freelancer's financial report.
             $db->prepare("UPDATE withdrawal_requests SET status = 'approved', decided_at = NOW() WHERE id = ?")
                ->execute([$requestId]);
-            $db->prepare("INSERT INTO wallet_transactions (user_id, type, amount, description) VALUES (?, 'withdrawal', ?, 'Вывод средств')")
+            $db->prepare("INSERT INTO wallet_transactions (user_id, type, amount, description) VALUES (?, 'withdrawal', ?, 'Виведення коштів')")
                ->execute([$wr['user_id'], $wr['amount']]);
-            create_notification($db, $wr['user_id'], 'withdrawal_approved', "Заявка на вывод {$wr['amount']} ₴ одобрена.");
+            create_notification($db, $wr['user_id'], 'withdrawal_approved', "Заявку на виведення {$wr['amount']} ₴ схвалено.");
         } else {
             $db->prepare("UPDATE withdrawal_requests SET status = 'rejected', decided_at = NOW() WHERE id = ?")
                ->execute([$requestId]);
             $db->prepare('UPDATE freelancer_profiles SET balance = balance + ? WHERE user_id = ?')
                ->execute([$wr['amount'], $wr['user_id']]);
-            create_notification($db, $wr['user_id'], 'withdrawal_rejected', "Заявка на вывод {$wr['amount']} ₴ отклонена, средства возвращены на баланс.");
+            create_notification($db, $wr['user_id'], 'withdrawal_rejected', "Заявку на виведення {$wr['amount']} ₴ відхилено, кошти повернуто на баланс.");
         }
 
         echo json_encode(['success' => true]);
@@ -446,7 +447,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$userId) {
         http_response_code(422);
-        echo json_encode(['error' => 'user_id is required']);
+        echo json_encode(['error' => 'Не вказано користувача (user_id)']);
         exit;
     }
 
@@ -457,7 +458,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $newStatus = $body['status'] ?? '';
         if (!in_array($newStatus, ['active', 'banned'], true)) {
             http_response_code(422);
-            echo json_encode(['error' => 'status: active|banned']);
+            echo json_encode(['error' => 'Статус: active|banned']);
             exit;
         }
         $stmt = $db->prepare('SELECT role, status FROM users WHERE id = ?');
@@ -465,17 +466,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $target = $stmt->fetch();
         if (!$target) {
             http_response_code(404);
-            echo json_encode(['error' => 'User not found']);
+            echo json_encode(['error' => 'Користувача не знайдено']);
             exit;
         }
         if ($target['role'] === 'admin') {
             http_response_code(409);
-            echo json_encode(['error' => 'Администратора заблокировать нельзя']);
+            echo json_encode(['error' => 'Адміністратора заблокувати не можна']);
             exit;
         }
         $db->prepare('UPDATE users SET status = ? WHERE id = ?')->execute([$newStatus, $userId]);
         if ($newStatus === 'active' && $target['status'] === 'banned') {
-            create_notification($db, $userId, 'account_unbanned', 'Ваш аккаунт разблокирован.');
+            create_notification($db, $userId, 'account_unbanned', 'Ваш акаунт розблоковано.');
         }
         echo json_encode(['success' => true, 'status' => $newStatus]);
         exit;
@@ -487,19 +488,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($status === false) {
         http_response_code(404);
-        echo json_encode(['error' => 'User not found']);
+        echo json_encode(['error' => 'Користувача не знайдено']);
         exit;
     }
     if ($status !== 'pending') {
         http_response_code(409);
-        echo json_encode(['error' => 'У пользователя нет заявки на рассмотрении']);
+        echo json_encode(['error' => 'У користувача немає заявки на розгляді']);
         exit;
     }
 
     if ($action === 'approve') {
         $db->prepare("UPDATE users SET verification_status = 'verified', verified_at = NOW() WHERE id = ?")
            ->execute([$userId]);
-        create_notification($db, $userId, 'verification_approved', 'Ваш профиль верифицирован!');
+        create_notification($db, $userId, 'verification_approved', 'Ваш профіль верифіковано!');
         echo json_encode(['success' => true]);
         exit;
     }
@@ -507,15 +508,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($action === 'reject') {
         $db->prepare("UPDATE users SET verification_status = 'rejected', verified_at = NULL WHERE id = ?")
            ->execute([$userId]);
-        create_notification($db, $userId, 'verification_rejected', 'Ваша заявка на верификацию была отклонена.');
+        create_notification($db, $userId, 'verification_rejected', 'Вашу заявку на верифікацію відхилено.');
         echo json_encode(['success' => true]);
         exit;
     }
 
     http_response_code(400);
-    echo json_encode(['error' => 'Unknown action']);
+    echo json_encode(['error' => 'Невідома дія']);
     exit;
 }
 
 http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+echo json_encode(['error' => 'Метод не підтримується']);

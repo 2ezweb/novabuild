@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($me['role'] !== 'client') {
         http_response_code(403);
-        echo json_encode(['error' => 'Only clients can post offers']);
+        echo json_encode(['error' => 'Публікувати офери можуть лише клієнти']);
         exit;
     }
 
@@ -93,7 +93,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$title) {
         http_response_code(422);
-        echo json_encode(['error' => 'Title is required']);
+        echo json_encode(['error' => 'Вкажіть назву']);
         exit;
     }
 
@@ -104,7 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$profile) {
         http_response_code(404);
-        echo json_encode(['error' => 'Client profile not found']);
+        echo json_encode(['error' => 'Профіль клієнта не знайдено']);
         exit;
     }
 
@@ -123,7 +123,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     if ($me['role'] !== 'client') {
         http_response_code(403);
-        echo json_encode(['error' => 'Only clients can edit offers']);
+        echo json_encode(['error' => 'Редагувати офери можуть лише клієнти']);
         exit;
     }
 
@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     $id   = (int)($body['id'] ?? 0);
     if (!$id) {
         http_response_code(422);
-        echo json_encode(['error' => 'id is required']);
+        echo json_encode(['error' => 'Не вказано id']);
         exit;
     }
 
@@ -144,7 +144,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     $stmt->execute([$id, $me['user_id']]);
     if (!$stmt->fetch()) {
         http_response_code(404);
-        echo json_encode(['error' => 'Offer not found']);
+        echo json_encode(['error' => 'Офер не знайдено']);
         exit;
     }
 
@@ -155,7 +155,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
         $title = trim($body['title']);
         if (!$title) {
             http_response_code(422);
-            echo json_encode(['error' => 'Title is required']);
+            echo json_encode(['error' => 'Вкажіть назву']);
             exit;
         }
         $fields[] = 'title = ?';
@@ -176,7 +176,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
     if (array_key_exists('status', $body)) {
         if (!in_array($body['status'], ['open', 'in_progress', 'closed'], true)) {
             http_response_code(422);
-            echo json_encode(['error' => 'Invalid status']);
+            echo json_encode(['error' => 'Некоректний статус']);
             exit;
         }
         $fields[] = 'status = ?';
@@ -185,7 +185,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 
     if (!$fields) {
         http_response_code(422);
-        echo json_encode(['error' => 'Nothing to update']);
+        echo json_encode(['error' => 'Немає що оновлювати']);
         exit;
     }
 
@@ -198,4 +198,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'PUT') {
 }
 
 http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+echo json_encode(['error' => 'Метод не підтримується']);

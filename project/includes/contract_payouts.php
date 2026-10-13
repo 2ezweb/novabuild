@@ -17,11 +17,11 @@ function pay_freelancer(PDO $db, array $row): void {
     $db->prepare("
         INSERT INTO wallet_transactions (user_id, type, amount, description, related_contract_id)
         VALUES (?, 'contract_payment', ?, ?, ?)
-    ")->execute([$row['client_user_id'], $amount, 'Оплата по контракту #' . contract_number($cid), $cid]);
+    ")->execute([$row['client_user_id'], $amount, 'Оплата за контрактом #' . contract_number($cid), $cid]);
     $db->prepare("
         INSERT INTO wallet_transactions (user_id, type, amount, description, related_contract_id)
         VALUES (?, 'contract_earning', ?, ?, ?)
-    ")->execute([$row['freelancer_user_id'], $amount, 'Оплата по контракту #' . contract_number($cid), $cid]);
+    ")->execute([$row['freelancer_user_id'], $amount, 'Оплата за контрактом #' . contract_number($cid), $cid]);
 }
 
 // A work hand-over still waiting for the client's ДА/НЕТ (work_submissions.php)
@@ -44,7 +44,7 @@ function refund_with_hold(PDO $db, array $row): void {
     $db->prepare("
         INSERT INTO wallet_transactions (user_id, type, amount, description, related_contract_id)
         VALUES (?, 'deposit', ?, ?, ?)
-    ")->execute([$row['client_user_id'], $amount, 'Возврат по контракту #' . contract_number($cid) . ' (не выполнен)', $cid]);
+    ")->execute([$row['client_user_id'], $amount, 'Повернення за контрактом #' . contract_number($cid) . ' (не виконано)', $cid]);
     $db->prepare('
         INSERT INTO balance_holds (user_id, contract_id, amount, release_at)
         VALUES (?, ?, ?, DATE_ADD(NOW(), INTERVAL ' . CONTRACT_HOLD_DAYS . ' DAY))

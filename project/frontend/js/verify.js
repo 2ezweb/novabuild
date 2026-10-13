@@ -12,7 +12,7 @@ window.addEventListener('DOMContentLoaded', () => {
 async function doVerify() {
   const code = val('verify-code');
   hideError('verify-error');
-  if (!code) return showError('verify-error', 'Введите код');
+  if (!code) return showError('verify-error', 'Введіть код');
 
   try {
     const res = await apiPost('/auth.php', { action: 'verify_email', email: pendingEmail, code });
@@ -30,7 +30,7 @@ async function doResend() {
   try {
     await apiPost('/auth.php', { action: 'resend_code', email: pendingEmail });
     const ok = document.getElementById('verify-success');
-    ok.textContent = 'Новый код отправлен';
+    ok.textContent = 'Новий код надіслано';
     ok.classList.remove('d-none');
   } catch (e) {
     showError('verify-error', e.message);

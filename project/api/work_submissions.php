@@ -30,14 +30,14 @@ function submission_contract_or_404(PDO $db, int $contractId, int $userId): arra
     $c = $stmt->fetch();
     if (!$c || ((int)$c['client_user_id'] !== $userId && (int)$c['freelancer_user_id'] !== $userId)) {
         http_response_code(404);
-        echo json_encode(['error' => 'Contract not found']);
+        echo json_encode(['error' => 'Контракт не знайдено']);
         exit;
     }
     return $c;
 }
 
 function contract_label(array $c): string {
-    return ($c['parent_contract_id'] ? 'этапу' : 'контракту') . ' #' . contract_number((int)$c['id']);
+    return ($c['parent_contract_id'] ? 'етапу' : 'контракту') . ' #' . contract_number((int)$c['id']);
 }
 
 // ─── GET ?contract_id: submission history, newest first, with files ─────────
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
@@ -77,17 +77,17 @@ if ($action === 'submit') {
 
     if ((int)$contract['freelancer_user_id'] !== $me['user_id']) {
         http_response_code(403);
-        echo json_encode(['error' => 'Сдать работу может только исполнитель']);
+        echo json_encode(['error' => 'Здати роботу може лише виконавець']);
         exit;
     }
     if ($contract['type'] === 'staged' && $contract['parent_contract_id'] === null) {
         http_response_code(409);
-        echo json_encode(['error' => 'В поэтапном контракте работа сдаётся по каждому этапу']);
+        echo json_encode(['error' => 'У поетапному контракті робота здається за кожним етапом']);
         exit;
     }
     if ($contract['status'] !== 'active') {
         http_response_code(409);
-        echo json_encode(['error' => 'Сдать работу можно только по активному контракту']);
+        echo json_encode(['error' => 'Здати роботу можна лише за активним контрактом']);
         exit;
     }
 
@@ -95,21 +95,21 @@ if ($action === 'submit') {
     $stmt->execute([$contract['id']]);
     if ($stmt->fetch()) {
         http_response_code(409);
-        echo json_encode(['error' => 'Работа уже сдана и ждёт решения клиента']);
+        echo json_encode(['error' => 'Роботу вже здано, вона чекає рішення клієнта']);
         exit;
     }
 
     $comment = trim((string)($body['comment'] ?? ''));
     if (mb_strlen($comment) > 5000) {
         http_response_code(422);
-        echo json_encode(['error' => 'Комментарий — не больше 5000 символов']);
+        echo json_encode(['error' => 'Коментар — не більше 5000 символів']);
         exit;
     }
 
     $saved = store_uploaded_files($_FILES['files'] ?? null, 'submissions');
     if ($comment === '' && !$saved) {
         http_response_code(422);
-        echo json_encode(['error' => 'Добавьте комментарий или файлы (' . UPLOAD_FORMATS_HINT . ')']);
+        echo json_encode(['error' => 'Додайте коментар або файли (' . UPLOAD_FORMATS_HINT . ')']);
         exit;
     }
 
@@ -130,7 +130,7 @@ if ($action === 'submit') {
     }
 
     create_notification($db, (int)$contract['client_user_id'], 'work_submitted',
-        'Фрилансер сдал работу по ' . contract_label($contract) . ' — примите или верните на доработку');
+        'Фрилансер здав роботу щодо ' . contract_label($contract) . ' — прийміть або поверніть на доопрацювання');
 
     http_response_code(201);
     echo json_encode(['id' => $submissionId, 'files_saved' => count($saved)]);
@@ -148,34 +148,34 @@ if ($action === 'decide') {
     $submission = $stmt->fetch();
     if (!$submission) {
         http_response_code(404);
-        echo json_encode(['error' => 'Submission not found']);
+        echo json_encode(['error' => 'Здачу роботи не знайдено']);
         exit;
     }
 
     $contract = submission_contract_or_404($db, (int)$submission['contract_id'], $me['user_id']);
     if ((int)$contract['client_user_id'] !== $me['user_id']) {
         http_response_code(403);
-        echo json_encode(['error' => 'Принять работу может только клиент']);
+        echo json_encode(['error' => 'Прийняти роботу може лише клієнт']);
         exit;
     }
     if ($submission['status'] !== 'submitted') {
         http_response_code(409);
-        echo json_encode(['error' => 'По этой сдаче решение уже принято']);
+        echo json_encode(['error' => 'Щодо цієї здачі рішення вже ухвалено']);
         exit;
     }
     if ($contract['status'] !== 'active') {
         http_response_code(409);
-        echo json_encode(['error' => 'Контракт уже не активен']);
+        echo json_encode(['error' => 'Контракт уже не активний']);
         exit;
     }
     if (!$accept && $clientNote === '') {
         http_response_code(422);
-        echo json_encode(['error' => 'Напишите, что нужно доработать']);
+        echo json_encode(['error' => 'Напишіть, що потрібно доопрацювати']);
         exit;
     }
     if (mb_strlen($clientNote) > 5000) {
         http_response_code(422);
-        echo json_encode(['error' => 'Комментарий — не больше 5000 символов']);
+        echo json_encode(['error' => 'Коментар — не більше 5000 символів']);
         exit;
     }
 
@@ -193,12 +193,12 @@ if ($action === 'decide') {
     create_notification($db, (int)$contract['freelancer_user_id'],
         $accept ? 'work_accepted' : 'work_rejected',
         $accept
-            ? 'Клиент принял работу по ' . contract_label($contract) . ' — оплата переведена на баланс'
-            : 'Клиент вернул работу по ' . contract_label($contract) . ' на доработку');
+            ? 'Клієнт прийняв роботу щодо ' . contract_label($contract) . ' — оплату переведено на баланс'
+            : 'Клієнт повернув роботу щодо ' . contract_label($contract) . ' на доопрацювання');
 
     echo json_encode(['success' => true]);
     exit;
 }
 
 http_response_code(400);
-echo json_encode(['error' => 'Unknown action']);
+echo json_encode(['error' => 'Невідома дія']);

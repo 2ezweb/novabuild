@@ -19,7 +19,7 @@ match ($action) {
     'login'        => handle_login($body),
     'verify_email' => handle_verify_email($body),
     'resend_code'  => handle_resend_code($body),
-    default        => respond(400, ['error' => 'Unknown action'])
+    default        => respond(400, ['error' => 'Невідома дія'])
 };
 
 // ─── REGISTER ────────────────────────────────────────────────────────────────
@@ -31,25 +31,25 @@ function handle_register(array $d): void {
 
     // Validation
     if (!filter_var($email, FILTER_VALIDATE_EMAIL))
-        respond(422, ['error' => 'Invalid email']);
+        respond(422, ['error' => 'Некоректний email']);
 
     if (strlen($password) < 6)
-        respond(422, ['error' => 'Password must be at least 6 characters']);
+        respond(422, ['error' => 'Пароль має містити щонайменше 6 символів']);
 
     if (!in_array($role, ['client', 'freelancer']))
-        respond(422, ['error' => 'Role must be client or freelancer']);
+        respond(422, ['error' => 'Роль: клієнт або фрилансер']);
 
     $db = get_db();
 
     // Cap account creation per IP — mass fake signups, not per-user brute force.
     if (!rate_limit_check($db, 'register_ip', client_ip(), 10, 3600))
-        respond(429, ['error' => 'Слишком много регистраций с этого адреса. Попробуйте позже.']);
+        respond(429, ['error' => 'Забагато реєстрацій з цієї адреси. Спробуйте пізніше.']);
     rate_limit_record($db, 'register_ip', client_ip());
 
     // Duplicate check
     $stmt = $db->prepare('SELECT id FROM users WHERE email = ?');
     $stmt->execute([$email]);
-    if ($stmt->fetch()) respond(409, ['error' => 'Email already registered']);
+    if ($stmt->fetch()) respond(409, ['error' => 'Цей email уже зареєстровано']);
 
     // Create user
     $hash = hash_password($password);
@@ -76,7 +76,7 @@ function handle_login(array $d): void {
     $password = trim($d['password'] ?? '');
 
     if (!$email || !$password)
-        respond(422, ['error' => 'Email and password required']);
+        respond(422, ['error' => 'Вкажіть email і пароль']);
 
     $db = get_db();
     $ip = client_ip();
@@ -84,7 +84,7 @@ function handle_login(array $d): void {
     // Per-account AND per-IP limits: the first stops someone hammering one
     // victim's password, the second stops one IP spraying many accounts.
     if (!rate_limit_check($db, 'login_email', $email, 5, 900) || !rate_limit_check($db, 'login_ip', $ip, 20, 900))
-        respond(429, ['error' => 'Слишком много попыток входа. Попробуйте через 15 минут.']);
+        respond(429, ['error' => 'Забагато спроб входу. Спробуйте через 15 хвилин.']);
 
     $stmt = $db->prepare('SELECT id, password_hash, role, status, email_verified_at FROM users WHERE email = ?');
     $stmt->execute([$email]);
@@ -93,14 +93,14 @@ function handle_login(array $d): void {
     if (!$user || !verify_and_upgrade_password($db, (int)$user['id'], $password, $user['password_hash'])) {
         rate_limit_record($db, 'login_email', $email);
         rate_limit_record($db, 'login_ip', $ip);
-        respond(401, ['error' => 'Invalid email or password']);
+        respond(401, ['error' => 'Невірний email або пароль']);
     }
 
     if ($user['status'] === 'banned')
-        respond(403, ['error' => 'Аккаунт заблокирован. Обратитесь в поддержку.']);
+        respond(403, ['error' => 'Акаунт заблоковано. Зверніться до підтримки.']);
 
     if (!$user['email_verified_at'])
-        respond(403, ['error' => 'Email не подтверждён', 'pending_verification' => true, 'email' => $email]);
+        respond(403, ['error' => 'Email не підтверджено', 'pending_verification' => true, 'email' => $email]);
 
     rate_limit_clear($db, 'login_email', $email);
 
@@ -115,14 +115,14 @@ function handle_verify_email(array $d): void {
     $code  = trim($d['code']  ?? '');
 
     if (!$email || !$code)
-        respond(422, ['error' => 'Email и код обязательны']);
+        respond(422, ['error' => 'Email і код обов\'язкові']);
 
     $db = get_db();
 
     // The code is only 6 digits (1M combos) over a 10-minute window — cap
     // guesses per email so scripting the guess isn't viable.
     if (!rate_limit_check($db, 'verify_email', $email, 5, 600))
-        respond(429, ['error' => 'Слишком много попыток. Запросите новый код.']);
+        respond(429, ['error' => 'Забагато спроб. Запросіть новий код.']);
 
     $stmt = $db->prepare('
         SELECT id, role, email_verified_at, verification_code, verification_code_expires_at
@@ -131,7 +131,7 @@ function handle_verify_email(array $d): void {
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    if (!$user) respond(404, ['error' => 'Пользователь не найден']);
+    if (!$user) respond(404, ['error' => 'Користувача не знайдено']);
 
     // Already verified (e.g. stale tab / double submit) — just log them in.
     if ($user['email_verified_at']) {
@@ -141,11 +141,11 @@ function handle_verify_email(array $d): void {
 
     if (!hash_equals((string)$user['verification_code'], $code)) {
         rate_limit_record($db, 'verify_email', $email);
-        respond(401, ['error' => 'Неверный код']);
+        respond(401, ['error' => 'Невірний код']);
     }
 
     if (!$user['verification_code_expires_at'] || strtotime($user['verification_code_expires_at']) < time())
-        respond(410, ['error' => 'Код истёк, запросите новый']);
+        respond(410, ['error' => 'Термін дії коду минув, запросіть новий']);
 
     $db->prepare('
         UPDATE users SET email_verified_at = NOW(), verification_code = NULL, verification_code_expires_at = NULL
@@ -162,21 +162,21 @@ function handle_verify_email(array $d): void {
 
 function handle_resend_code(array $d): void {
     $email = trim($d['email'] ?? '');
-    if (!$email) respond(422, ['error' => 'Email обязателен']);
+    if (!$email) respond(422, ['error' => 'Email обов\'язковий']);
 
     $db = get_db();
 
     // Each resend is a real email sent through the hosting's mail queue —
     // cap it so this can't be used to spam an inbox or burn the mail quota.
     if (!rate_limit_check($db, 'resend_code', $email, 3, 600))
-        respond(429, ['error' => 'Слишком много запросов кода. Попробуйте через 10 минут.']);
+        respond(429, ['error' => 'Забагато запитів коду. Спробуйте через 10 хвилин.']);
 
     $stmt = $db->prepare('SELECT id, email_verified_at FROM users WHERE email = ?');
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    if (!$user) respond(404, ['error' => 'Пользователь не найден']);
-    if ($user['email_verified_at']) respond(400, ['error' => 'Email уже подтверждён']);
+    if (!$user) respond(404, ['error' => 'Користувача не знайдено']);
+    if ($user['email_verified_at']) respond(400, ['error' => 'Email уже підтверджено']);
 
     rate_limit_record($db, 'resend_code', $email);
     issue_verification_code($db, (int)$user['id'], $email);
@@ -197,8 +197,8 @@ function issue_verification_code(PDO $db, int $user_id, string $email): void {
 }
 
 function send_verification_email(string $email, string $code): void {
-    $subject = 'Код подтверждения — NovaBuild';
-    $message = "Ваш код подтверждения: $code\n\nКод действителен 10 минут.";
+    $subject = 'Код підтвердження — NovaBuild';
+    $message = "Ваш код підтвердження: $code\n\nКод дійсний 10 хвилин.";
     $headers = "From: NovaBuild <no-reply@test2.2ezweb.tech>\r\nContent-Type: text/plain; charset=utf-8";
     mail($email, $subject, $message, $headers);
 }

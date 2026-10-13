@@ -13,20 +13,20 @@ $me = require_auth();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
 if (!in_array($me['role'], ['client', 'freelancer'], true)) {
     http_response_code(403);
-    echo json_encode(['error' => 'Финансовый отчёт доступен клиентам и фрилансерам']);
+    echo json_encode(['error' => 'Фінансовий звіт доступний клієнтам і фрилансерам']);
     exit;
 }
 
 $period = $_GET['period'] ?? 'month';
 if (!in_array($period, ['month', 'year', 'all'], true)) {
     http_response_code(422);
-    echo json_encode(['error' => 'period must be month, year or all']);
+    echo json_encode(['error' => 'Період: month, year або all']);
     exit;
 }
 
@@ -37,8 +37,8 @@ $db = get_db();
 // admin.php::approve_withdrawal) — 'deposit'/'contract_payment'/'contract_earning'
 // are reserved for when the contract-signing/escrow flow exists.
 [$inType, $outType, $inLabel, $outLabel] = $me['role'] === 'freelancer'
-    ? ['contract_earning', 'withdrawal', 'Заработано', 'Выведено']
-    : ['deposit', 'contract_payment', 'Пополнено', 'Отправлено на контракты'];
+    ? ['contract_earning', 'withdrawal', 'Зароблено', 'Виведено']
+    : ['deposit', 'contract_payment', 'Поповнено', 'Відправлено на контракти'];
 
 if ($period === 'month') {
     $since      = new DateTime(date('Y-m-01'));

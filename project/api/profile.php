@@ -14,7 +14,7 @@ $db = get_db();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
@@ -26,7 +26,7 @@ $last_name  = trim($body['last_name'] ?? '');
 
 if (!$first_name) {
     http_response_code(422);
-    echo json_encode(['error' => 'Укажите имя']);
+    echo json_encode(['error' => 'Вкажіть ім\'я']);
     exit;
 }
 
@@ -41,7 +41,7 @@ if ($me['role'] === 'admin') {
         $stmt->execute([$login, $me['user_id']]);
         if ($stmt->fetch()) {
             http_response_code(409);
-            echo json_encode(['error' => 'Логин уже занят']);
+            echo json_encode(['error' => 'Логін уже зайнятий']);
             exit;
         }
         $db->prepare('UPDATE users SET email = ? WHERE id = ?')->execute([$login, $me['user_id']]);
@@ -60,7 +60,7 @@ if ($me['role'] === 'freelancer') {
 
     if (mb_strlen($about) > 3000) {
         http_response_code(422);
-        echo json_encode(['error' => 'Описание не должно превышать 3000 символов']);
+        echo json_encode(['error' => 'Опис не має перевищувати 3000 символів']);
         exit;
     }
 

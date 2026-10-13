@@ -44,7 +44,7 @@ function updateAmountPreview() {
   const el = document.getElementById('amount-preview');
   if (!selectedAmount) { el.style.display = 'none'; return; }
   el.style.display = '';
-  el.textContent = `К зачислению: ${selectedAmount} коннектов (курс 1 ₴ = 1 коннект)`;
+  el.textContent = `До зарахування: ${selectedAmount} конектів (курс 1 ₴ = 1 конект)`;
 }
 
 // ─── STEP 2: PAYMENT (formatCardNumber/formatCardExpiry live in common.js) ───
@@ -53,16 +53,16 @@ async function submitPurchase(method) {
   document.getElementById('purchase-success').classList.add('d-none');
 
   if (!selectedAmount || selectedAmount < 10) {
-    return showError('purchase-error', 'Выберите сумму пополнения (минимум 10 ₴)');
+    return showError('purchase-error', 'Оберіть суму поповнення (мінімум 10 ₴)');
   }
 
   if (method === 'card') {
     const number = document.getElementById('card-number').value.replace(/\s/g, '');
     const expiry = val('card-expiry');
     const cvv    = val('card-cvv');
-    if (!/^\d{16}$/.test(number))    return showError('purchase-error', 'Введите номер карты (16 цифр)');
-    if (!/^\d{2}\/\d{2}$/.test(expiry)) return showError('purchase-error', 'Формат срока действия — ММ/ГГ');
-    if (!/^\d{3}$/.test(cvv))        return showError('purchase-error', 'CVV — 3 цифры');
+    if (!/^\d{16}$/.test(number))    return showError('purchase-error', 'Введіть номер картки (16 цифр)');
+    if (!/^\d{2}\/\d{2}$/.test(expiry)) return showError('purchase-error', 'Формат терміну дії — ММ/РР');
+    if (!/^\d{3}$/.test(cvv))        return showError('purchase-error', 'CVV — 3 цифри');
   }
 
   try {
@@ -71,7 +71,7 @@ async function submitPurchase(method) {
     document.getElementById('current-balance').textContent = res.connects_balance;
 
     const ok = document.getElementById('purchase-success');
-    ok.textContent = `Начислено ${res.connects_added} коннектов. Текущий баланс: ${res.connects_balance}.`;
+    ok.textContent = `Нараховано ${res.connects_added} конектів. Поточний баланс: ${res.connects_balance}.`;
     ok.classList.remove('d-none');
 
     if (method === 'card') {

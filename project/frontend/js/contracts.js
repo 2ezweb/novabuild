@@ -60,20 +60,20 @@ function renderList() {
   const rows = currentTab === 'active' ? active : done;
   document.getElementById('contract-list').innerHTML = rows.length
     ? rows.map(contractCard).join('')
-    : emptyState(currentTab === 'active' ? 'Активных контрактов пока нет.' : 'Завершённых контрактов пока нет.');
+    : emptyState(currentTab === 'active' ? 'Активних контрактів поки немає.' : 'Завершених контрактів поки немає.');
 }
 
 function contractCard(c) {
-  const otherName = [c.other_first_name, c.other_last_name_initial].filter(Boolean).join(' ') || 'Собеседник';
+  const otherName = [c.other_first_name, c.other_last_name_initial].filter(Boolean).join(' ') || 'Співрозмовник';
   const roleNote = c.status === 'proposed'
-    ? (Number(c.client_user_id) === currentUser.id ? 'вы предложили' : 'вам предложили')
+    ? (Number(c.client_user_id) === currentUser.id ? 'ви запропонували' : 'вам запропонували')
     : '';
   const staged = c.type === 'staged';
   const typeBadge = staged
-    ? `<span class="badge bg-info text-dark">поэтапный · ${(c.stages || []).length} эт.</span>`
+    ? `<span class="badge bg-info text-dark">поетапний · ${(c.stages || []).length} ет.</span>`
     : '';
   const escrowNote = c.status === 'active' && Number(c.escrowed_amount) > 0
-    ? `<div class="text-muted small mt-1">в эскроу: ${esc(formatUAH(c.escrowed_amount))}${staged ? '' : ' / ' + esc(formatUAH(c.price))}</div>`
+    ? `<div class="text-muted small mt-1">в ескроу: ${esc(formatUAH(c.escrowed_amount))}${staged ? '' : ' / ' + esc(formatUAH(c.price))}</div>`
     : '';
   const payBadge = paymentBadgeHtml(c);
 

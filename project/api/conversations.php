@@ -42,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         ');
     } else {
         http_response_code(403);
-        echo json_encode(['error' => 'Chat is only for clients and freelancers']);
+        echo json_encode(['error' => 'Чат доступний лише клієнтам і фрилансерам']);
         exit;
     }
     $stmt->execute([$me['user_id'], $me['user_id']]);
@@ -62,7 +62,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
         if (!$one) {
             http_response_code(404);
-            echo json_encode(['error' => 'Conversation not found']);
+            echo json_encode(['error' => 'Переписку не знайдено']);
             exit;
         }
         echo json_encode($one);
@@ -77,7 +77,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($me['role'] !== 'client') {
         http_response_code(403);
-        echo json_encode(['error' => 'Только клиент может начать переписку']);
+        echo json_encode(['error' => 'Лише клієнт може почати переписку']);
         exit;
     }
 
@@ -85,7 +85,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $body['action'] ?? '';
     if ($action !== 'start') {
         http_response_code(400);
-        echo json_encode(['error' => 'Unknown action']);
+        echo json_encode(['error' => 'Невідома дія']);
         exit;
     }
 
@@ -94,7 +94,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $stmt->execute([$freelancerId]);
     if (!$stmt->fetch()) {
         http_response_code(404);
-        echo json_encode(['error' => 'Фрилансер не найден']);
+        echo json_encode(['error' => 'Фрилансера не знайдено']);
         exit;
     }
 
@@ -116,4 +116,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+echo json_encode(['error' => 'Метод не підтримується']);

@@ -15,19 +15,19 @@ require_once __DIR__ . '/../includes/notifications.php';
 const CONNECTS_PER_UAH  = 1;
 const MIN_PURCHASE_UAH  = 10;
 const MAX_PURCHASE_UAH  = 100000;
-const PAYMENT_METHODS   = ['card' => 'банковской картой', 'gpay' => 'через Google Pay', 'liqpay' => 'через LiqPay'];
+const PAYMENT_METHODS   = ['card' => 'банківською карткою', 'gpay' => 'через Google Pay', 'liqpay' => 'через LiqPay'];
 
 $me = require_auth();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
 if ($me['role'] !== 'freelancer') {
     http_response_code(403);
-    echo json_encode(['error' => 'Коннекты доступны только фрилансерам']);
+    echo json_encode(['error' => 'Конекти доступні лише фрилансерам']);
     exit;
 }
 
@@ -36,21 +36,21 @@ $action = $body['action'] ?? '';
 
 if ($action !== 'purchase') {
     http_response_code(400);
-    echo json_encode(['error' => 'Unknown action']);
+    echo json_encode(['error' => 'Невідома дія']);
     exit;
 }
 
 $method = $body['method'] ?? '';
 if (!isset(PAYMENT_METHODS[$method])) {
     http_response_code(422);
-    echo json_encode(['error' => 'Неизвестный способ оплаты']);
+    echo json_encode(['error' => 'Невідомий спосіб оплати']);
     exit;
 }
 
 $amount = is_numeric($body['amount'] ?? '') ? (float)$body['amount'] : 0;
 if ($amount < MIN_PURCHASE_UAH || $amount > MAX_PURCHASE_UAH) {
     http_response_code(422);
-    echo json_encode(['error' => 'Сумма должна быть от ' . MIN_PURCHASE_UAH . ' до ' . MAX_PURCHASE_UAH . ' ₴']);
+    echo json_encode(['error' => 'Сума має бути від ' . MIN_PURCHASE_UAH . ' до ' . MAX_PURCHASE_UAH . ' ₴']);
     exit;
 }
 
@@ -71,7 +71,7 @@ create_notification(
     $db,
     $me['user_id'],
     'connects_purchased',
-    "Зачислено {$connects} коннектов (" . PAYMENT_METHODS[$method] . ", {$amount} ₴)"
+    "Зараховано {$connects} конектів (" . PAYMENT_METHODS[$method] . ", {$amount} ₴)"
 );
 
 echo json_encode(['connects_added' => $connects, 'connects_balance' => $balance]);

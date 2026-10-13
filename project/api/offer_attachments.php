@@ -28,7 +28,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $offer_id = (int)($_GET['offer_id'] ?? 0);
     if (!$offer_id) {
         http_response_code(422);
-        echo json_encode(['error' => 'offer_id is required']);
+        echo json_encode(['error' => 'Не вказано офер (offer_id)']);
         exit;
     }
 
@@ -45,27 +45,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($me['role'] !== 'client') {
         http_response_code(403);
-        echo json_encode(['error' => 'Only clients can attach files to offers']);
+        echo json_encode(['error' => 'Додавати файли до оферів можуть лише клієнти']);
         exit;
     }
 
     $offer_id = (int)($_POST['offer_id'] ?? 0);
     if (!$offer_id || !offer_owned_by($db, $offer_id, $me['user_id'])) {
         http_response_code(404);
-        echo json_encode(['error' => 'Offer not found']);
+        echo json_encode(['error' => 'Офер не знайдено']);
         exit;
     }
 
     if (empty($_FILES['files'])) {
         http_response_code(422);
-        echo json_encode(['error' => 'Файл не загружен']);
+        echo json_encode(['error' => 'Файл не завантажено']);
         exit;
     }
 
     $files = store_uploaded_files($_FILES['files'], 'offers');
     if (!$files) {
         http_response_code(422);
-        echo json_encode(['error' => 'Не удалось сохранить файлы — проверьте формат (' . UPLOAD_FORMATS_HINT . ')']);
+        echo json_encode(['error' => 'Не вдалося зберегти файли — перевірте формат (' . UPLOAD_FORMATS_HINT . ')']);
         exit;
     }
 
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 
     if (!$id) {
         http_response_code(422);
-        echo json_encode(['error' => 'id is required']);
+        echo json_encode(['error' => 'Не вказано id']);
         exit;
     }
 
@@ -107,7 +107,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 
     if (!$attachment) {
         http_response_code(404);
-        echo json_encode(['error' => 'Attachment not found']);
+        echo json_encode(['error' => 'Файл не знайдено']);
         exit;
     }
 
@@ -121,4 +121,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'DELETE') {
 }
 
 http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+echo json_encode(['error' => 'Метод не підтримується']);

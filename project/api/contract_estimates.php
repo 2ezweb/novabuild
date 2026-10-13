@@ -27,7 +27,7 @@ function contract_participant_or_404(PDO $db, int $contractId, int $userId): arr
     $c = $stmt->fetch();
     if (!$c || ((int)$c['client_user_id'] !== $userId && (int)$c['freelancer_user_id'] !== $userId)) {
         http_response_code(404);
-        echo json_encode(['error' => 'Contract not found']);
+        echo json_encode(['error' => 'Контракт не знайдено']);
         exit;
     }
     return $c;
@@ -67,7 +67,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
@@ -78,7 +78,7 @@ $action = $body['action'] ?? '';
 if ($action === 'submit') {
     if ($me['role'] !== 'freelancer') {
         http_response_code(403);
-        echo json_encode(['error' => 'Смету составляет фрилансер']);
+        echo json_encode(['error' => 'Кошторис складає фрилансер']);
         exit;
     }
 
@@ -87,17 +87,17 @@ if ($action === 'submit') {
 
     if ((int)$contract['freelancer_user_id'] !== $me['user_id']) {
         http_response_code(403);
-        echo json_encode(['error' => 'Not your contract']);
+        echo json_encode(['error' => 'Це не ваш контракт']);
         exit;
     }
     if ($contract['type'] === 'staged' && $contract['parent_contract_id'] === null) {
         http_response_code(409);
-        echo json_encode(['error' => 'Смету нужно составлять по конкретному этапу, а не по всему поэтапному контракту']);
+        echo json_encode(['error' => 'Кошторис складається для конкретного етапу, а не для всього поетапного контракту']);
         exit;
     }
     if ($contract['status'] !== 'active') {
         http_response_code(409);
-        echo json_encode(['error' => 'Смету можно составить только после подписания контракта']);
+        echo json_encode(['error' => 'Кошторис можна скласти лише після підписання контракту']);
         exit;
     }
 
@@ -105,7 +105,7 @@ if ($action === 'submit') {
     $note  = trim($body['note'] ?? '');
     if (!$items) {
         http_response_code(422);
-        echo json_encode(['error' => 'Добавьте хотя бы одну позицию сметы']);
+        echo json_encode(['error' => 'Додайте хоча б одну позицію кошторису']);
         exit;
     }
 
@@ -113,7 +113,7 @@ if ($action === 'submit') {
     $stmt->execute([$contractId]);
     if ($stmt->fetch()) {
         http_response_code(409);
-        echo json_encode(['error' => 'Предыдущая смета по этому контракту ещё на рассмотрении у заказчика']);
+        echo json_encode(['error' => 'Попередній кошторис щодо цього контракту ще на розгляді в замовника']);
         exit;
     }
 
@@ -129,9 +129,9 @@ if ($action === 'submit') {
 
     $db->prepare('UPDATE contracts SET estimate_id = ? WHERE id = ?')->execute([$estimateId, $contractId]);
 
-    $noun = $contract['parent_contract_id'] ? 'этапу' : 'контракту';
+    $noun = $contract['parent_contract_id'] ? 'етапу' : 'контракту';
     create_notification($db, (int)$contract['client_user_id'], 'estimate_submitted',
-        "Фрилансер прислал смету по $noun #" . contract_number($contractId));
+        "Фрилансер надіслав кошторис щодо $noun #" . contract_number($contractId));
 
     http_response_code(201);
     echo json_encode(['id' => $estimateId, 'total' => $total]);
@@ -142,7 +142,7 @@ if ($action === 'submit') {
 if ($action === 'respond') {
     if ($me['role'] !== 'client') {
         http_response_code(403);
-        echo json_encode(['error' => 'Смету утверждает заказчик']);
+        echo json_encode(['error' => 'Кошторис затверджує замовник']);
         exit;
     }
 
@@ -154,33 +154,33 @@ if ($action === 'respond') {
     $est = $stmt->fetch();
     if (!$est) {
         http_response_code(404);
-        echo json_encode(['error' => 'Смета не найдена']);
+        echo json_encode(['error' => 'Кошторис не знайдено']);
         exit;
     }
 
     $contract = contract_participant_or_404($db, (int)$est['contract_id'], $me['user_id']);
     if ((int)$contract['client_user_id'] !== $me['user_id']) {
         http_response_code(403);
-        echo json_encode(['error' => 'Not your contract']);
+        echo json_encode(['error' => 'Це не ваш контракт']);
         exit;
     }
     if ($est['status'] !== 'submitted') {
         http_response_code(409);
-        echo json_encode(['error' => 'Смета уже обработана']);
+        echo json_encode(['error' => 'Кошторис уже оброблено']);
         exit;
     }
 
     $db->prepare("UPDATE contract_estimates SET status = ?, decided_at = NOW() WHERE id = ?")
        ->execute([$accept ? 'accepted' : 'rejected', $estimateId]);
 
-    $noun = $contract['parent_contract_id'] ? 'этапу' : 'контракту';
+    $noun = $contract['parent_contract_id'] ? 'етапу' : 'контракту';
     create_notification($db, (int)$est['freelancer_user_id'],
         $accept ? 'estimate_accepted' : 'estimate_rejected',
-        ($accept ? 'Заказчик утвердил смету по ' : 'Заказчик отклонил смету по ') . $noun . ' #' . contract_number((int)$contract['id']));
+        ($accept ? 'Замовник затвердив кошторис щодо ' : 'Замовник відхилив кошторис щодо ') . $noun . ' #' . contract_number((int)$contract['id']));
 
     echo json_encode(['success' => true]);
     exit;
 }
 
 http_response_code(400);
-echo json_encode(['error' => 'Unknown action']);
+echo json_encode(['error' => 'Невідома дія']);

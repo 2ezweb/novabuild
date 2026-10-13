@@ -24,7 +24,7 @@ async function loadOffer() {
     const offer = offers.find(o => o.id === offerId);
     if (!offer) {
       document.getElementById('offer-summary').innerHTML = '';
-      showError('offer-error', 'Оффер не найден');
+      showError('offer-error', 'Офер не знайдено');
       return;
     }
 
@@ -51,7 +51,7 @@ async function loadOfferAttachments() {
   try {
     const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
     if (!attachments.length) return;
-    container.innerHTML = '<div class="text-muted small mb-1">Файлы:</div><div></div>';
+    container.innerHTML = '<div class="text-muted small mb-1">Файли:</div><div></div>';
     renderAttachments(container.querySelector('div'), attachments);
   } catch { /* non-critical */ }
 }
@@ -61,7 +61,7 @@ async function loadBids() {
   try {
     const bids = await apiFetch(`/bids.php?offer_id=${offerId}`);
     if (!bids.length) {
-      list.innerHTML = emptyState('Заявок пока нет.');
+      list.innerHTML = emptyState('Заявок поки немає.');
       return;
     }
     list.innerHTML = bids.map((b, i) => bidCard(b, i + 1)).join('');
@@ -88,18 +88,18 @@ function bidCard(b, rank) {
           <a href="freelancer-profile.html?user_id=${b.freelancer_user_id}" class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-semibold text-decoration-none" style="width:48px;height:48px;font-size:1rem;${avatarStyle}">${avatarUrlValue ? '' : esc(initials(name))}</a>
           <div>
             <div class="fw-semibold"><a href="freelancer-profile.html?user_id=${b.freelancer_user_id}" class="text-decoration-none text-reset">${esc(name)}</a>${verified}</div>
-            <div class="text-muted small">${esc(b.specialization || 'Специализация не указана')}</div>
+            <div class="text-muted small">${esc(b.specialization || 'Спеціалізацію не вказано')}</div>
             <div>${ratingBadgeHtml(b.rating_avg, b.rating_count)}</div>
           </div>
         </div>
         <div class="text-end">
           ${rankBadge}
-          <div class="text-muted small mt-1">Ставка: ${b.connects_spent} коннектов</div>
-          <button class="btn btn-sm btn-outline-primary mt-1" onclick="messageFreelancer(${b.freelancer_user_id})">✉ Написать</button>
+          <div class="text-muted small mt-1">Ставка: ${b.connects_spent} конектів</div>
+          <button class="btn btn-sm btn-outline-primary mt-1" onclick="messageFreelancer(${b.freelancer_user_id})">✉ Написати</button>
         </div>
       </div>
       ${coverNoteHtml(b.cover_note, b.id)}
-      <div class="text-muted small mt-2">Подана ${timeAgo(b.created_at)}</div>
+      <div class="text-muted small mt-2">Подано ${timeAgo(b.created_at)}</div>
     </div>`;
 }
 
@@ -120,7 +120,7 @@ function coverNoteHtml(note, bidId) {
     <div class="mt-2">
       <p class="text-muted small mb-1" id="cover-preview-${bidId}">${previewHtml}…</p>
       <p class="text-muted small mb-1 d-none" id="cover-full-${bidId}">${fullHtml}</p>
-      <a href="#" class="small" id="cover-toggle-${bidId}" onclick="toggleCoverNote(${bidId}); return false;">Показать полностью</a>
+      <a href="#" class="small" id="cover-toggle-${bidId}" onclick="toggleCoverNote(${bidId}); return false;">Показати повністю</a>
     </div>`;
 }
 
@@ -132,7 +132,7 @@ function toggleCoverNote(bidId) {
 
   preview.classList.toggle('d-none', !showingFull);
   full.classList.toggle('d-none', showingFull);
-  toggle.textContent = showingFull ? 'Показать полностью' : 'Свернуть';
+  toggle.textContent = showingFull ? 'Показати повністю' : 'Згорнути';
 }
 
 async function messageFreelancer(freelancerUserId) {

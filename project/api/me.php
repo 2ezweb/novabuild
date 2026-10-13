@@ -52,7 +52,7 @@ $user = $stmt->fetch();
 
 if (!$user) {
     http_response_code(404);
-    echo json_encode(['error' => 'User not found']);
+    echo json_encode(['error' => 'Користувача не знайдено']);
     exit;
 }
 

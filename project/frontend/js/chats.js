@@ -15,19 +15,19 @@ async function loadChats() {
     const conversations = await apiFetch('/conversations.php');
     list.innerHTML = conversations.length
       ? conversations.map(chatRow).join('')
-      : emptyState('Переписок пока нет.');
+      : emptyState('Переписок поки немає.');
   } catch (e) {
     list.innerHTML = `<div class="alert alert-warning">${esc(e.message)}</div>`;
   }
 }
 
 function chatRow(c) {
-  const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Собеседник';
+  const name = [c.first_name, c.last_name].filter(Boolean).join(' ') || 'Співрозмовник';
   const avatarUrlValue = assetUrl(c.avatar_path);
   const avatarStyle = avatarUrlValue
     ? `background-image:url('${avatarUrlValue}');background-size:cover;background-position:center`
     : '';
-  const preview = c.last_message ? truncateText(c.last_message, 80) : 'Нет сообщений';
+  const preview = c.last_message ? truncateText(c.last_message, 80) : 'Немає повідомлень';
   const unread = c.unread_count > 0;
 
   return `

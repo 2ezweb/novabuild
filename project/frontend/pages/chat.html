@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="uk">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Чат — NovaBuild</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-  <link rel="stylesheet" href="../css/common.css?v=20">
-  <link rel="stylesheet" href="../css/chat.css?v=20">
+  <link rel="stylesheet" href="../css/common.css?v=21">
+  <link rel="stylesheet" href="../css/chat.css?v=21">
 </head>
 <body>
 
@@ -16,16 +16,16 @@
     <a class="navbar-brand fw-bold mb-0" href="dashboard.html" id="nav-brand">🏗 NovaBuild</a>
     <a class="text-white small text-decoration-none fw-semibold" href="dashboard.html" id="nav-home-link">Дашборд</a>
     <a class="text-white small text-decoration-none fw-semibold" href="chats.html" id="nav-chat-link" style="display:none">Чат</a>
-    <a class="text-white small text-decoration-none fw-semibold" href="contracts.html" id="nav-work-link" style="display:none">Контракты</a>
+    <a class="text-white small text-decoration-none fw-semibold" href="contracts.html" id="nav-work-link" style="display:none">Контракти</a>
   </div>
   <div class="d-flex align-items-center gap-2">
     <div class="dropdown">
-      <button class="btn btn-outline-light rounded-circle avatar-btn position-relative" type="button" id="nav-bell" data-bs-toggle="dropdown" aria-expanded="false" title="Уведомления">
+      <button class="btn btn-outline-light rounded-circle avatar-btn position-relative" type="button" id="nav-bell" data-bs-toggle="dropdown" aria-expanded="false" title="Сповіщення">
         🔔
         <span class="position-absolute top-0 start-100 translate-middle p-1 bg-danger rounded-circle" id="bell-dot" style="display:none"></span>
       </button>
       <div class="dropdown-menu dropdown-menu-end p-0 notifications-dropdown" id="notifications-list">
-        <div class="text-muted small p-3 text-center">Загрузка...</div>
+        <div class="text-muted small p-3 text-center">Завантаження...</div>
       </div>
     </div>
     <div class="dropdown">
@@ -33,8 +33,8 @@
       <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="nav-avatar">
         <li><span class="dropdown-item-text small text-muted" id="nav-email"></span></li>
         <li><hr class="dropdown-divider"></li>
-        <li><a class="dropdown-item" href="cabinet.html">Профиль</a></li>
-        <li><a class="dropdown-item" href="#" onclick="logout()">Выйти</a></li>
+        <li><a class="dropdown-item" href="cabinet.html">Профіль</a></li>
+        <li><a class="dropdown-item" href="#" onclick="logout()">Вийти</a></li>
       </ul>
     </div>
   </div>
@@ -56,11 +56,11 @@
       <div id="messages-list" class="chat-messages mb-3"></div>
 
       <form class="d-flex gap-2" onsubmit="sendMessage(event)">
-        <label class="btn btn-outline-secondary mb-0" title="Прикрепить фото или документ (png/jpg/pdf/docx/xlsx, до 15 МБ)">
+        <label class="btn btn-outline-secondary mb-0" title="Прикріпити фото або документ (png/jpg/pdf/docx/xlsx, до 15 МБ)">
           📎<input type="file" id="message-files" multiple accept=".png,.jpg,.jpeg,.pdf,.docx,.xlsx" hidden onchange="onChatFilesChange()">
         </label>
-        <input type="text" class="form-control" id="message-input" placeholder="Написать сообщение..." maxlength="5000" autocomplete="off">
-        <button class="btn btn-primary" type="submit" id="message-send-btn">Отправить</button>
+        <input type="text" class="form-control" id="message-input" placeholder="Написати повідомлення..." maxlength="5000" autocomplete="off">
+        <button class="btn btn-primary" type="submit" id="message-send-btn">Надіслати</button>
       </form>
       <div id="message-files-preview" class="small mt-1"></div>
 
@@ -70,7 +70,7 @@
     <div class="col-lg-4">
       <div class="card p-3">
         <div class="d-flex justify-content-between align-items-center mb-2">
-          <h6 class="fw-semibold mb-0">Контракты</h6>
+          <h6 class="fw-semibold mb-0">Контракти</h6>
           <button class="btn btn-sm btn-primary" id="propose-contract-btn" onclick="openProposeModal()" style="display:none">＋ Контракт</button>
         </div>
         <div id="contract-cards" class="chat-contracts-list"></div>
@@ -84,50 +84,50 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-bold">Предложить контракт</h5>
+        <h5 class="modal-title fw-bold">Запропонувати контракт</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div id="propose-error" class="alert alert-danger d-none"></div>
 
         <div class="mb-3">
-          <label class="form-label">Оффер <span class="text-muted small">(опционально — подтянет цену и срок)</span></label>
+          <label class="form-label">Офер <span class="text-muted small">(необов'язково — підтягне ціну й термін)</span></label>
           <select class="form-select" id="propose-offer-select" onchange="onProposeOfferChange()">
-            <option value="">— без привязки к офферу —</option>
+            <option value="">— без прив'язки до офера —</option>
           </select>
         </div>
 
         <div class="mb-3">
-          <label class="form-label d-block">Тип контракта</label>
+          <label class="form-label d-block">Тип контракту</label>
           <div class="form-check form-check-inline">
             <input class="form-check-input" type="radio" name="propose-type" id="propose-type-full" value="full" checked onchange="onProposeTypeChange()">
-            <label class="form-check-label" for="propose-type-full">Полный</label>
+            <label class="form-check-label" for="propose-type-full">Повний</label>
           </div>
           <div class="form-check form-check-inline">
             <input class="form-check-input" type="radio" name="propose-type" id="propose-type-staged" value="staged" onchange="onProposeTypeChange()">
-            <label class="form-check-label" for="propose-type-staged">Поэтапный</label>
+            <label class="form-check-label" for="propose-type-staged">Поетапний</label>
           </div>
-          <div class="form-text" id="propose-type-hint">Договорились за цену и срок, сделали работу — закрыли.</div>
+          <div class="form-text" id="propose-type-hint">Домовилися про ціну й термін, зробили роботу — закрили.</div>
         </div>
 
         <div class="mb-3" id="propose-stage-title-wrap" style="display:none">
-          <label class="form-label">Название первого этапа</label>
-          <input type="text" class="form-control" id="propose-stage-title" placeholder="Этап 1: демонтаж и вывоз мусора">
+          <label class="form-label">Назва першого етапу</label>
+          <input type="text" class="form-control" id="propose-stage-title" placeholder="Етап 1: демонтаж і вивезення сміття">
         </div>
 
         <div class="mb-3">
-          <label class="form-label" id="propose-price-label">Цена, ₴</label>
+          <label class="form-label" id="propose-price-label">Ціна, ₴</label>
           <input type="number" class="form-control" id="propose-price" min="1">
         </div>
         <div class="mb-3">
-          <label class="form-label" id="propose-deadline-label">Срок <span class="text-muted small">(опционально)</span></label>
+          <label class="form-label" id="propose-deadline-label">Термін <span class="text-muted small">(необов'язково)</span></label>
           <input type="date" class="form-control" id="propose-deadline">
         </div>
-        <div class="form-text">Материалы закупает заказчик самостоятельно.</div>
+        <div class="form-text">Матеріали закуповує замовник самостійно.</div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-        <button class="btn btn-primary" onclick="submitPropose()">Отправить</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+        <button class="btn btn-primary" onclick="submitPropose()">Надіслати</button>
       </div>
     </div>
   </div>
@@ -139,7 +139,7 @@
     <div class="modal-content">
       <div class="modal-header">
         <div class="dropdown" id="contract-actions-wrap" style="display:none">
-          <button class="btn btn-sm btn-outline-secondary lh-1 px-2" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Действия">⋮</button>
+          <button class="btn btn-sm btn-outline-secondary lh-1 px-2" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="Дії">⋮</button>
           <ul class="dropdown-menu" id="contract-actions-menu"></ul>
         </div>
         <h5 class="modal-title fw-bold mb-0 flex-grow-1 ms-2" id="contract-modal-title">Контракт</h5>
@@ -147,8 +147,8 @@
       </div>
       <div class="modal-body" id="contract-modal-body"></div>
       <div class="modal-footer">
-        <a class="btn btn-outline-secondary me-auto" id="contract-chat-link" href="#">Открыть переписку</a>
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Закрыть</button>
+        <a class="btn btn-outline-secondary me-auto" id="contract-chat-link" href="#">Відкрити переписку</a>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>
       </div>
     </div>
   </div>
@@ -159,24 +159,24 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-bold">Предложить изменения</h5>
+        <h5 class="modal-title fw-bold">Запропонувати зміни</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div id="change-error" class="alert alert-danger d-none"></div>
-        <p class="text-muted small">Заполните то, что хотите изменить — второе поле можно оставить пустым.</p>
+        <p class="text-muted small">Заповніть те, що хочете змінити, — друге поле можна залишити порожнім.</p>
         <div class="mb-3">
-          <label class="form-label">Новая цена, ₴</label>
+          <label class="form-label">Нова ціна, ₴</label>
           <input type="number" class="form-control" id="change-price" min="1">
         </div>
         <div class="mb-3">
-          <label class="form-label">Новый срок</label>
+          <label class="form-label">Новий термін</label>
           <input type="date" class="form-control" id="change-deadline">
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-        <button class="btn btn-primary" onclick="cmSubmitChange()">Предложить</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+        <button class="btn btn-primary" onclick="cmSubmitChange()">Запропонувати</button>
       </div>
     </div>
   </div>
@@ -187,14 +187,14 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-bold">Оплатить контракт</h5>
+        <h5 class="modal-title fw-bold">Оплатити контракт</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div id="deposit-error" class="alert alert-danger d-none"></div>
-        <p class="text-muted small">Демо-режим: реальный платёж не выполняется, сумма зачисляется в эскроу сразу. Деньги хранятся на бирже до закрытия контракта.</p>
+        <p class="text-muted small">Демо-режим: реальний платіж не виконується, сума зараховується в ескроу одразу. Гроші зберігаються на біржі до закриття контракту.</p>
         <div class="mb-3">
-          <label class="form-label">Сумма, ₴</label>
+          <label class="form-label">Сума, ₴</label>
           <input type="number" class="form-control" id="deposit-amount" min="10" oninput="cmRenderDepositSplit()">
           <div class="form-text" id="deposit-remaining-hint"></div>
         </div>
@@ -202,11 +202,11 @@
         <!-- balance-first split: filled by contract-actions.js cmRenderDepositSplit() -->
         <div id="deposit-split" class="border rounded p-2 mb-3 small" style="display:none"></div>
         <div class="alert alert-info small py-2 mb-3" id="deposit-withdraw-notice"></div>
-        <button class="btn btn-success w-100 mb-2" id="deposit-balance-only-btn" style="display:none" onclick="cmSubmitDeposit('')">Оплатить с баланса на сайте</button>
+        <button class="btn btn-success w-100 mb-2" id="deposit-balance-only-btn" style="display:none" onclick="cmSubmitDeposit('')">Оплатити з балансу на сайті</button>
 
         <div id="deposit-methods">
         <ul class="nav nav-tabs mb-3">
-          <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dep-card" type="button">💳 Карта</button></li>
+          <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#dep-card" type="button">💳 Картка</button></li>
           <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dep-gpay" type="button">Ⓖ Google Pay</button></li>
           <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#dep-liqpay" type="button">🟡 LiqPay</button></li>
         </ul>
@@ -214,14 +214,14 @@
         <div class="tab-content">
           <div class="tab-pane fade show active" id="dep-card">
             <div class="mb-2">
-              <label class="form-label">Номер карты</label>
+              <label class="form-label">Номер картки</label>
               <input type="text" class="form-control" id="deposit-card-number" placeholder="0000 0000 0000 0000"
                      inputmode="numeric" oninput="formatCardNumber(this)">
             </div>
             <div class="row g-2 mb-3">
               <div class="col">
-                <label class="form-label">Срок действия</label>
-                <input type="text" class="form-control" id="deposit-card-expiry" placeholder="ММ/ГГ"
+                <label class="form-label">Термін дії</label>
+                <input type="text" class="form-control" id="deposit-card-expiry" placeholder="ММ/РР"
                        inputmode="numeric" oninput="formatCardExpiry(this)">
               </div>
               <div class="col">
@@ -230,23 +230,23 @@
                        inputmode="numeric" oninput="this.value = this.value.replace(/\D/g,'').slice(0,3)">
               </div>
             </div>
-            <button class="btn btn-primary w-100" onclick="cmSubmitDeposit('card')">Оплатить картой</button>
+            <button class="btn btn-primary w-100" onclick="cmSubmitDeposit('card')">Оплатити карткою</button>
           </div>
 
           <div class="tab-pane fade text-center" id="dep-gpay">
-            <p class="text-muted small">Оплата через Google Pay — подтверждение приходит от Google.</p>
-            <button class="btn btn-dark" onclick="cmSubmitDeposit('gpay')">Ⓖ Pay — подтвердить оплату</button>
+            <p class="text-muted small">Оплата через Google Pay — підтвердження надходить від Google.</p>
+            <button class="btn btn-dark" onclick="cmSubmitDeposit('gpay')">Ⓖ Pay — підтвердити оплату</button>
           </div>
 
           <div class="tab-pane fade text-center" id="dep-liqpay">
-            <p class="text-muted small">Оплата через LiqPay — подтверждение приходит от LiqPay.</p>
-            <button class="btn btn-warning" onclick="cmSubmitDeposit('liqpay')">🟡 Оплатить через LiqPay</button>
+            <p class="text-muted small">Оплата через LiqPay — підтвердження надходить від LiqPay.</p>
+            <button class="btn btn-warning" onclick="cmSubmitDeposit('liqpay')">🟡 Оплатити через LiqPay</button>
           </div>
         </div>
         </div><!-- /deposit-methods -->
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
       </div>
     </div>
   </div>
@@ -257,27 +257,27 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-bold">Сформировать этап</h5>
+        <h5 class="modal-title fw-bold">Сформувати етап</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div id="stage-error" class="alert alert-danger d-none"></div>
         <div class="mb-3">
-          <label class="form-label">Название этапа</label>
-          <input type="text" class="form-control" id="stage-title" placeholder="Этап 2: черновая отделка">
+          <label class="form-label">Назва етапу</label>
+          <input type="text" class="form-control" id="stage-title" placeholder="Етап 2: чорнове оздоблення">
         </div>
         <div class="mb-3">
-          <label class="form-label">Цена этапа, ₴</label>
+          <label class="form-label">Ціна етапу, ₴</label>
           <input type="number" class="form-control" id="stage-price" min="1">
         </div>
         <div class="mb-3">
-          <label class="form-label">Срок <span class="text-muted small">(опционально)</span></label>
+          <label class="form-label">Термін <span class="text-muted small">(необов'язково)</span></label>
           <input type="date" class="form-control" id="stage-deadline">
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-        <button class="btn btn-primary" onclick="cmSubmitStage()">Сформировать</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+        <button class="btn btn-primary" onclick="cmSubmitStage()">Сформувати</button>
       </div>
     </div>
   </div>
@@ -288,7 +288,7 @@
   <div class="modal-dialog modal-lg">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-bold">Смета на материалы</h5>
+        <h5 class="modal-title fw-bold">Кошторис на матеріали</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
@@ -299,22 +299,22 @@
             <table class="table table-sm align-middle mb-2">
               <thead>
                 <tr>
-                  <th>Материал / работа</th>
-                  <th style="width:80px">Кол-во</th>
-                  <th style="width:80px">Ед.</th>
-                  <th style="width:120px">Цена/ед, ₴</th>
+                  <th>Матеріал / робота</th>
+                  <th style="width:80px">К-сть</th>
+                  <th style="width:80px">Од.</th>
+                  <th style="width:120px">Ціна/од, ₴</th>
                   <th style="width:32px"></th>
                 </tr>
               </thead>
               <tbody id="estimate-rows"></tbody>
             </table>
           </div>
-          <button class="btn btn-sm btn-outline-secondary" onclick="addEstimateRow()">＋ Позиция</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="addEstimateRow()">＋ Позиція</button>
           <div class="mt-3">
-            <label class="form-label">Комментарий <span class="text-muted small">(опционально)</span></label>
+            <label class="form-label">Коментар <span class="text-muted small">(необов'язково)</span></label>
             <textarea class="form-control" id="estimate-note" rows="2"></textarea>
           </div>
-          <div class="text-end fw-semibold mt-2" id="estimate-editor-total">Итого: ₴ 0</div>
+          <div class="text-end fw-semibold mt-2" id="estimate-editor-total">Разом: ₴ 0</div>
         </div>
 
         <div id="estimate-readonly"></div>
@@ -329,20 +329,20 @@
   <div class="modal-dialog">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title fw-bold">Позвать администратора</h5>
+        <h5 class="modal-title fw-bold">Покликати адміністратора</h5>
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div id="escalate-error" class="alert alert-danger d-none"></div>
-        <p class="text-muted small">Администрация увидит условия контракта, всю переписку и смету и примет решение — вплоть до изменения условий или закрытия контракта без согласия сторон.</p>
+        <p class="text-muted small">Адміністрація побачить умови контракту, усю переписку й кошторис і ухвалить рішення — аж до зміни умов або закриття контракту без згоди сторін.</p>
         <div class="mb-2">
-          <label class="form-label">В чём проблема?</label>
-          <textarea class="form-control" id="escalate-reason" rows="4" placeholder="Опишите суть конфликта..."></textarea>
+          <label class="form-label">У чому проблема?</label>
+          <textarea class="form-control" id="escalate-reason" rows="4" placeholder="Опишіть суть конфлікту..."></textarea>
         </div>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" data-bs-dismiss="modal">Отмена</button>
-        <button class="btn btn-danger" onclick="cmSubmitEscalate()">Отправить обращение</button>
+        <button class="btn btn-secondary" data-bs-dismiss="modal">Скасувати</button>
+        <button class="btn btn-danger" onclick="cmSubmitEscalate()">Надіслати звернення</button>
       </div>
     </div>
   </div>
@@ -350,7 +350,7 @@
 
 <!-- ── FULLSCREEN IMAGE GALLERY (common.js openGallery) ─────────────────── -->
 <div id="image-gallery-overlay" class="align-items-center justify-content-center" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.92); z-index:1090;">
-  <button type="button" class="btn btn-light position-absolute" style="top:20px; right:20px;" onclick="closeGallery()">✕ Закрыть</button>
+  <button type="button" class="btn btn-light position-absolute" style="top:20px; right:20px;" onclick="closeGallery()">✕ Закрити</button>
   <button type="button" id="gallery-prev" class="btn btn-light position-absolute" style="left:20px; top:50%; transform:translateY(-50%);" onclick="galleryStep(-1)">‹</button>
   <img id="gallery-image" style="max-width:90vw; max-height:85vh; object-fit:contain;">
   <button type="button" id="gallery-next" class="btn btn-light position-absolute" style="right:20px; top:50%; transform:translateY(-50%);" onclick="galleryStep(1)">›</button>
@@ -359,8 +359,8 @@
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://js.pusher.com/8.4/pusher.min.js"></script>
-<script src="../js/common.js?v=20"></script>
-<script src="../js/contract-actions.js?v=20"></script>
-<script src="../js/chat.js?v=20"></script>
+<script src="../js/common.js?v=21"></script>
+<script src="../js/contract-actions.js?v=21"></script>
+<script src="../js/chat.js?v=21"></script>
 </body>
 </html>

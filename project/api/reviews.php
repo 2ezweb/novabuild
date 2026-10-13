@@ -24,7 +24,7 @@ function review_contract_or_404(PDO $db, int $contractId, int $userId): array {
     $c = $stmt->fetch();
     if (!$c || ((int)$c['client_user_id'] !== $userId && (int)$c['freelancer_user_id'] !== $userId)) {
         http_response_code(404);
-        echo json_encode(['error' => 'Contract not found']);
+        echo json_encode(['error' => 'Контракт не знайдено']);
         exit;
     }
     return $c;
@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
@@ -51,30 +51,30 @@ $contract = review_contract_or_404($db, (int)($body['contract_id'] ?? 0), $me['u
 
 if ((int)$contract['client_user_id'] !== $me['user_id']) {
     http_response_code(403);
-    echo json_encode(['error' => 'Отзыв оставляет только клиент']);
+    echo json_encode(['error' => 'Відгук залишає лише клієнт']);
     exit;
 }
 if ($contract['parent_contract_id'] !== null) {
     http_response_code(409);
-    echo json_encode(['error' => 'Отзыв оставляется на весь контракт, а не на этап']);
+    echo json_encode(['error' => 'Відгук залишається на весь контракт, а не на етап']);
     exit;
 }
 if (!in_array($contract['status'], ['completed', 'failed'], true)) {
     http_response_code(409);
-    echo json_encode(['error' => 'Отзыв можно оставить только после закрытия контракта']);
+    echo json_encode(['error' => 'Відгук можна залишити лише після закриття контракту']);
     exit;
 }
 
 $rating = (int)($body['rating'] ?? 0);
 if ($rating < 1 || $rating > 5) {
     http_response_code(422);
-    echo json_encode(['error' => 'Оценка — от 1 до 5']);
+    echo json_encode(['error' => 'Оцінка — від 1 до 5']);
     exit;
 }
 $comment = trim((string)($body['comment'] ?? ''));
 if (mb_strlen($comment) > 2000) {
     http_response_code(422);
-    echo json_encode(['error' => 'Отзыв — не больше 2000 символов']);
+    echo json_encode(['error' => 'Відгук — не більше 2000 символів']);
     exit;
 }
 
@@ -84,14 +84,14 @@ try {
 } catch (PDOException $e) {
     if ($e->getCode() === '23000') {   // UNIQUE(contract_id)
         http_response_code(409);
-        echo json_encode(['error' => 'Отзыв по этому контракту уже оставлен']);
+        echo json_encode(['error' => 'Відгук щодо цього контракту вже залишено']);
         exit;
     }
     throw $e;
 }
 
 create_notification($db, (int)$contract['freelancer_user_id'], 'review_received',
-    "Клиент оставил отзыв ($rating/5) по контракту #" . contract_number((int)$contract['id']));
+    "Клієнт залишив відгук ($rating/5) щодо контракту #" . contract_number((int)$contract['id']));
 
 http_response_code(201);
 echo json_encode(['success' => true]);

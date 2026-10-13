@@ -21,8 +21,8 @@ function renderSidebarProfile() {
   const isFreelancer = currentUser.role === 'freelancer';
   const name = displayName(currentUser);
   const sub = isFreelancer
-    ? (currentUser.specialization || 'Специализация не указана')
-    : (currentUser.company_name ? currentUser.company_name : 'Частное лицо');
+    ? (currentUser.specialization || 'Спеціалізацію не вказано')
+    : (currentUser.company_name ? currentUser.company_name : 'Приватна особа');
 
   document.querySelectorAll('.sidebar-avatar').forEach(el => renderAvatarEl(el, name, currentUser.avatar_path));
   document.querySelectorAll('.sidebar-name').forEach(el => el.innerHTML = `${esc(name)} ${roleBadgeHtml(currentUser)}`);
@@ -57,7 +57,7 @@ async function loadClientDashboard() {
     const visibleOffers = offers.filter(o => o.status !== 'closed');
     const list = document.getElementById('client-offers-list');
     if (!visibleOffers.length) {
-      list.innerHTML = emptyState('Офферов пока нет. Разместите первый!');
+      list.innerHTML = emptyState('Оферів поки немає. Розмістіть перший!');
       return;
     }
     list.innerHTML = visibleOffers.map(offerCardClient).join('');
@@ -77,9 +77,9 @@ function offerCardClick(event, offerId) {
 function offerCardClient(o) {
   return `
     <div class="card offer-card mb-3 p-3" role="button" onclick="offerCardClick(event, ${o.id})">
-      ${o.is_outdated ? `<div class="mb-2"><span class="badge bg-warning text-dark">Уже найден работник</span></div>` : ''}
+      ${o.is_outdated ? `<div class="mb-2"><span class="badge bg-warning text-dark">Виконавця вже знайдено</span></div>` : ''}
       <div class="d-flex justify-content-between text-muted small mb-2">
-        <span>Опубликовано ${timeAgo(o.created_at)}</span>
+        <span>Опубліковано ${timeAgo(o.created_at)}</span>
         <span>Заявок: ${o.bid_count || 0}</span>
       </div>
       <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
@@ -93,8 +93,8 @@ function offerCardClient(o) {
         </div>
         <div class="d-flex gap-2">
           <a class="btn btn-sm btn-outline-primary" href="offer.html?id=${o.id}">Заявки${o.bid_count ? ` (${o.bid_count})` : ''}</a>
-          <button class="btn btn-sm btn-outline-secondary" onclick="editOffer(${o.id})">Редактировать</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="closeOffer(${o.id})">Закрыть</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="editOffer(${o.id})">Редагувати</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="closeOffer(${o.id})">Закрити</button>
         </div>
       </div>
     </div>`;
@@ -108,8 +108,8 @@ function openCreateOffer() {
   document.getElementById('offer-deadline').value = '';
   document.getElementById('offer-files').value = '';
   document.getElementById('offer-existing-files').innerHTML = '';
-  document.getElementById('offerModalLabel').textContent = 'Новый оффер';
-  document.getElementById('offer-submit-btn').textContent = 'Разместить';
+  document.getElementById('offerModalLabel').textContent = 'Новий офер';
+  document.getElementById('offer-submit-btn').textContent = 'Розмістити';
   hideError('offer-error');
   new bootstrap.Modal(document.getElementById('offerModal')).show();
 }
@@ -123,8 +123,8 @@ function editOffer(id) {
   document.getElementById('offer-budget').value = o.budget || '';
   document.getElementById('offer-deadline').value = o.deadline || '';
   document.getElementById('offer-files').value = '';
-  document.getElementById('offerModalLabel').textContent = 'Редактировать оффер';
-  document.getElementById('offer-submit-btn').textContent = 'Сохранить';
+  document.getElementById('offerModalLabel').textContent = 'Редагувати офер';
+  document.getElementById('offer-submit-btn').textContent = 'Зберегти';
   hideError('offer-error');
   loadOfferAttachmentsIntoEditModal(o.id);
   new bootstrap.Modal(document.getElementById('offerModal')).show();
@@ -136,13 +136,13 @@ function attachmentRow(a, deletable) {
       <a href="${assetUrl(a.file_path)}" target="_blank" rel="noopener" class="attachment-file-link text-decoration-none">
         ${fileIcon(a.mime_type)} ${esc(a.original_name)} <span class="text-muted">(${formatFileSize(a.size)})</span>
       </a>
-      ${deletable ? `<button type="button" class="btn-close flex-shrink-0 ms-2" style="font-size:.65rem" title="Удалить" onclick="deleteOfferAttachment(${a.id}, ${a.offer_id})"></button>` : ''}
+      ${deletable ? `<button type="button" class="btn-close flex-shrink-0 ms-2" style="font-size:.65rem" title="Видалити" onclick="deleteOfferAttachment(${a.id}, ${a.offer_id})"></button>` : ''}
     </div>`;
 }
 
 async function loadOfferAttachmentsIntoEditModal(offerId) {
   const container = document.getElementById('offer-existing-files');
-  container.innerHTML = '<p class="text-muted small">Загрузка...</p>';
+  container.innerHTML = '<p class="text-muted small">Завантаження...</p>';
   try {
     const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
     container.innerHTML = attachments.map(a => attachmentRow({ ...a, offer_id: offerId }, true)).join('');
@@ -152,7 +152,7 @@ async function loadOfferAttachmentsIntoEditModal(offerId) {
 }
 
 async function deleteOfferAttachment(id, offerId) {
-  if (!confirm('Удалить файл?')) return;
+  if (!confirm('Видалити файл?')) return;
   try {
     await apiDelete('/offer_attachments.php', { id });
     loadOfferAttachmentsIntoEditModal(offerId);
@@ -168,7 +168,7 @@ async function submitOffer() {
   const budget      = val('offer-budget');
   const deadline    = val('offer-deadline');
   hideError('offer-error');
-  if (!title) return showError('offer-error', 'Укажите заголовок');
+  if (!title) return showError('offer-error', 'Вкажіть заголовок');
   try {
     let offerId = Number(id) || null;
     if (offerId) {
@@ -194,7 +194,7 @@ async function submitOffer() {
 }
 
 async function closeOffer(id) {
-  if (!confirm('Закрыть этот оффер? Фрилансеры больше не смогут его увидеть или откликнуться.')) return;
+  if (!confirm('Закрити цей офер? Фрилансери більше не зможуть його побачити чи відгукнутися.')) return;
   try {
     await apiPut('/offers.php', { id, status: 'closed' });
     loadClientDashboard();
@@ -223,7 +223,7 @@ async function loadFreelancerDashboard() {
 
     const list = document.getElementById('freelancer-offers-list');
     if (!offers.length) {
-      list.innerHTML = emptyState('Нет доступных офферов. Загляните позже.');
+      list.innerHTML = emptyState('Немає доступних оферів. Загляньте пізніше.');
       return;
     }
     list.innerHTML = offers.map(o => offerCardFreelancer(o, bidOfferIds.has(o.id))).join('');
@@ -234,13 +234,13 @@ async function loadFreelancerDashboard() {
 }
 
 function offerCardFreelancer(o, alreadyBid) {
-  const clientLabel = o.client_company_name ? esc(o.client_company_name) : 'Частное лицо';
+  const clientLabel = o.client_company_name ? esc(o.client_company_name) : 'Приватна особа';
   const clientBadge = o.client_verification_status === 'verified' ? '<span class="badge bg-success ms-1">✓</span>' : '';
   return `
     <div class="card offer-card mb-3 p-3" role="button" onclick="offerCardClick(event, ${o.id})">
-      ${o.is_outdated ? `<div class="mb-2"><span class="badge bg-warning text-dark">Уже найден работник</span></div>` : ''}
+      ${o.is_outdated ? `<div class="mb-2"><span class="badge bg-warning text-dark">Виконавця вже знайдено</span></div>` : ''}
       <div class="d-flex justify-content-between text-muted small mb-2">
-        <span>Опубликовано ${timeAgo(o.created_at)}</span>
+        <span>Опубліковано ${timeAgo(o.created_at)}</span>
         <span>Заявок: ${o.bid_count || 0}</span>
       </div>
       <div class="text-muted small mb-1">${clientLabel}${clientBadge}</div>
@@ -253,8 +253,8 @@ function offerCardFreelancer(o, alreadyBid) {
           ${o.attachment_count ? `<span class="badge bg-light text-dark border">📎 ${o.attachment_count}</span>` : ''}
         </div>
         ${alreadyBid
-          ? `<span class="badge bg-success">✓ Заявка подана</span>`
-          : `<button class="btn btn-sm btn-outline-primary" onclick="openBidModal(${o.id})">Подать заявку</button>`
+          ? `<span class="badge bg-success">✓ Заявку подано</span>`
+          : `<button class="btn btn-sm btn-outline-primary" onclick="openBidModal(${o.id})">Подати заявку</button>`
         }
       </div>
     </div>`;
@@ -272,7 +272,7 @@ async function openBidModal(offerId) {
   try {
     const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
     if (attachments.length) {
-      container.innerHTML = '<label class="form-label">Файлы от заказчика</label><div></div>';
+      container.innerHTML = '<label class="form-label">Файли від замовника</label><div></div>';
       renderAttachments(container.querySelector('div'), attachments);
     }
   } catch { /* non-critical */ }
@@ -291,7 +291,7 @@ async function openOfferDetail(offerId) {
   document.getElementById('offer-detail-description').textContent = o.description || '';
   document.getElementById('offer-detail-badges').innerHTML = `
     <span class="badge bg-secondary">${statusLabel(o.status)}</span>
-    ${o.is_outdated ? `<span class="badge bg-warning text-dark">Уже найден работник</span>` : ''}
+    ${o.is_outdated ? `<span class="badge bg-warning text-dark">Виконавця вже знайдено</span>` : ''}
     ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
     ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
   `;
@@ -300,9 +300,9 @@ async function openOfferDetail(offerId) {
   if (isClient) {
     clientInfoEl.innerHTML = '';
   } else {
-    const clientLabel = o.client_company_name ? esc(o.client_company_name) : 'Частное лицо';
+    const clientLabel = o.client_company_name ? esc(o.client_company_name) : 'Приватна особа';
     const clientBadge = o.client_verification_status === 'verified' ? '<span class="badge bg-success ms-1">✓</span>' : '';
-    clientInfoEl.innerHTML = `<div class="text-muted small mb-2">Заказчик: ${clientLabel}${clientBadge}</div>`;
+    clientInfoEl.innerHTML = `<div class="text-muted small mb-2">Замовник: ${clientLabel}${clientBadge}</div>`;
   }
 
   const bidBtn = document.getElementById('offer-detail-bid-btn');
@@ -318,7 +318,7 @@ async function openOfferDetail(offerId) {
   }
 
   const attachmentsEl = document.getElementById('offer-detail-attachments');
-  attachmentsEl.innerHTML = '<p class="text-muted small">Загрузка...</p>';
+  attachmentsEl.innerHTML = '<p class="text-muted small">Завантаження...</p>';
   try {
     const attachments = await apiFetch(`/offer_attachments.php?offer_id=${offerId}`);
     renderAttachments(attachmentsEl, attachments);
@@ -334,7 +334,7 @@ async function submitBid() {
   const connects = Number(val('bid-connects'));
   const message  = val('bid-message');
   hideError('bid-error');
-  if (!connects || connects < 10) return showError('bid-error', 'Минимальная ставка — 10 коннектов');
+  if (!connects || connects < 10) return showError('bid-error', 'Мінімальна ставка — 10 конектів');
 
   try {
     const res = await apiPost('/bids.php', { offer_id: offerId, connects, cover_note: message });

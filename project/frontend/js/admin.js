@@ -36,7 +36,7 @@ async function loadUsers() {
   try {
     const users = await apiFetch('/admin.php?action=users');
     if (!users.length) {
-      list.innerHTML = emptyState('Пользователей пока нет.');
+      list.innerHTML = emptyState('Користувачів поки немає.');
       return;
     }
     list.innerHTML = `
@@ -44,7 +44,7 @@ async function loadUsers() {
         <table class="table table-sm align-middle">
           <thead>
             <tr>
-              <th>Имя</th><th>Email / логин</th><th>Роль</th><th>Верификация</th><th>Статус</th><th>Регистрация</th><th></th>
+              <th>Ім'я</th><th>Email / логін</th><th>Роль</th><th>Верифікація</th><th>Статус</th><th>Реєстрація</th><th></th>
             </tr>
           </thead>
           <tbody>
@@ -59,11 +59,11 @@ async function loadUsers() {
 
 function userRow(u) {
   const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || '—';
-  const roleLabel = { client: 'Клиент', freelancer: 'Фрилансер', admin: 'Админ' }[u.role] ?? u.role;
+  const roleLabel = { client: 'Клієнт', freelancer: 'Фрилансер', admin: 'Адмін' }[u.role] ?? u.role;
   const verMap = {
-    verified: '<span class="badge bg-success">✓ Верифицирован</span>',
-    pending:  '<span class="badge bg-warning text-dark">⏳ На проверке</span>',
-    rejected: '<span class="badge bg-danger">✗ Отклонено</span>',
+    verified: '<span class="badge bg-success">✓ Верифіковано</span>',
+    pending:  '<span class="badge bg-warning text-dark">⏳ На перевірці</span>',
+    rejected: '<span class="badge bg-danger">✗ Відхилено</span>',
     none:     '<span class="text-muted small">—</span>',
   };
   return `
@@ -72,7 +72,7 @@ function userRow(u) {
       <td>${esc(u.email)}</td>
       <td>${esc(roleLabel)}</td>
       <td>${verMap[u.verification_status] ?? ''}</td>
-      <td>${u.status === 'banned' ? '<span class="badge bg-danger">заблокирован</span>' : '<span class="badge bg-light text-dark border">активен</span>'}</td>
+      <td>${u.status === 'banned' ? '<span class="badge bg-danger">заблоковано</span>' : '<span class="badge bg-light text-dark border">активний</span>'}</td>
       <td class="text-muted small">${esc(u.created_at)}</td>
       <td class="text-end">${userBanButton(u)}</td>
     </tr>`;
@@ -82,14 +82,14 @@ function userRow(u) {
 function userBanButton(u) {
   if (u.role === 'admin') return '';
   return u.status === 'banned'
-    ? `<button class="btn btn-sm btn-outline-success" onclick="setUserStatus(${u.id}, 'active')">Разблокировать</button>`
-    : `<button class="btn btn-sm btn-outline-danger" onclick="setUserStatus(${u.id}, 'banned')">🚫 Заблокировать</button>`;
+    ? `<button class="btn btn-sm btn-outline-success" onclick="setUserStatus(${u.id}, 'active')">Розблокувати</button>`
+    : `<button class="btn btn-sm btn-outline-danger" onclick="setUserStatus(${u.id}, 'banned')">🚫 Заблокувати</button>`;
 }
 
 async function setUserStatus(userId, status) {
   const q = status === 'banned'
-    ? 'Заблокировать пользователя? Он сразу потеряет доступ к сайту, даже если сейчас залогинен.'
-    : 'Разблокировать пользователя?';
+    ? 'Заблокувати користувача? Він одразу втратить доступ до сайту, навіть якщо зараз залогінений.'
+    : 'Розблокувати користувача?';
   if (!confirm(q)) return;
   try {
     await apiPost('/admin.php', { action: 'set_user_status', user_id: userId, status });
@@ -113,7 +113,7 @@ async function loadRequests() {
     }
 
     if (!requests.length) {
-      list.innerHTML = emptyState('Заявок на рассмотрении нет.');
+      list.innerHTML = emptyState('Заявок на розгляді немає.');
       return;
     }
     list.innerHTML = requests.map(requestCard).join('');
@@ -124,7 +124,7 @@ async function loadRequests() {
 
 function requestCard(u) {
   const name = [u.first_name, u.last_name].filter(Boolean).join(' ') || u.email;
-  const roleLabel = { client: 'Клиент', freelancer: 'Фрилансер' }[u.role] ?? u.role;
+  const roleLabel = { client: 'Клієнт', freelancer: 'Фрилансер' }[u.role] ?? u.role;
   return `
     <div class="card mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -133,9 +133,9 @@ function requestCard(u) {
           <p class="text-muted small mb-0">${esc(u.email)}</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-          <button class="btn btn-sm btn-outline-secondary" onclick="viewDocument(${u.id})">Открыть документ</button>
-          <button class="btn btn-sm btn-success" onclick="decideRequest(${u.id}, 'approve')">Одобрить</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="decideRequest(${u.id}, 'reject')">Отклонить</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="viewDocument(${u.id})">Відкрити документ</button>
+          <button class="btn btn-sm btn-success" onclick="decideRequest(${u.id}, 'approve')">Схвалити</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="decideRequest(${u.id}, 'reject')">Відхилити</button>
         </div>
       </div>
     </div>`;
@@ -165,7 +165,7 @@ async function loadWithdrawals() {
     }
 
     if (!requests.length) {
-      list.innerHTML = emptyState('Заявок на вывод нет.');
+      list.innerHTML = emptyState('Заявок на виведення немає.');
       return;
     }
     list.innerHTML = requests.map(withdrawalCard).join('');
@@ -181,11 +181,11 @@ function withdrawalCard(r) {
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
           <h6 class="fw-semibold mb-1">${esc(name)} <span class="text-muted small">— ${esc(formatUAH(r.amount))}</span></h6>
-          <p class="text-muted small mb-0">${esc(r.email)} · подана ${timeAgo(r.created_at)}</p>
+          <p class="text-muted small mb-0">${esc(r.email)} · подано ${timeAgo(r.created_at)}</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-          <button class="btn btn-sm btn-success" onclick="decideWithdrawal(${r.id}, 'approve_withdrawal')">Одобрить</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="decideWithdrawal(${r.id}, 'reject_withdrawal')">Отклонить</button>
+          <button class="btn btn-sm btn-success" onclick="decideWithdrawal(${r.id}, 'approve_withdrawal')">Схвалити</button>
+          <button class="btn btn-sm btn-outline-danger" onclick="decideWithdrawal(${r.id}, 'reject_withdrawal')">Відхилити</button>
         </div>
       </div>
     </div>`;
@@ -214,7 +214,7 @@ async function loadDisputes() {
     }
 
     if (!disputes.length) {
-      list.innerHTML = emptyState('Спорных контрактов нет.');
+      list.innerHTML = emptyState('Спірних контрактів немає.');
       return;
     }
     list.innerHTML = disputes.map(disputeCard).join('');
@@ -224,26 +224,26 @@ async function loadDisputes() {
 }
 
 function disputeCard(d) {
-  const clientName = [d.client_first_name, d.client_last_name].filter(Boolean).join(' ') || 'Клиент';
+  const clientName = [d.client_first_name, d.client_last_name].filter(Boolean).join(' ') || 'Клієнт';
   const freelancerName = [d.freelancer_first_name, d.freelancer_last_name].filter(Boolean).join(' ') || 'Фрилансер';
   return `
     <div class="card mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
           <h6 class="fw-semibold mb-1">Контракт #${d.contract_number || d.contract_id} — ${esc(formatUAH(d.amount))}</h6>
-          <p class="text-muted small mb-0">Клиент: ${esc(clientName)} · Фрилансер: ${esc(freelancerName)}</p>
-          <p class="text-muted small mb-0">Оспорено ${timeAgo(d.disputed_at)}</p>
+          <p class="text-muted small mb-0">Клієнт: ${esc(clientName)} · Фрилансер: ${esc(freelancerName)}</p>
+          <p class="text-muted small mb-0">Оскаржено ${timeAgo(d.disputed_at)}</p>
         </div>
         <div class="d-flex gap-2 flex-wrap">
-          <button class="btn btn-sm btn-outline-secondary" onclick="decideDispute(${d.hold_id}, 'to_client')">В пользу клиента</button>
-          <button class="btn btn-sm btn-success" onclick="decideDispute(${d.hold_id}, 'to_freelancer')">В пользу фрилансера</button>
+          <button class="btn btn-sm btn-outline-secondary" onclick="decideDispute(${d.hold_id}, 'to_client')">На користь клієнта</button>
+          <button class="btn btn-sm btn-success" onclick="decideDispute(${d.hold_id}, 'to_freelancer')">На користь фрилансера</button>
         </div>
       </div>
     </div>`;
 }
 
 async function decideDispute(holdId, resolution) {
-  if (!confirm('Решение спора нельзя отменить. Продолжить?')) return;
+  if (!confirm('Рішення щодо спору не можна скасувати. Продовжити?')) return;
   try {
     await apiPost('/admin.php', { action: 'resolve_dispute', hold_id: holdId, resolution });
     loadDisputes();
@@ -266,7 +266,7 @@ async function loadEscalations() {
     }
 
     if (!escalations.length) {
-      list.innerHTML = emptyState('Открытых обращений нет.');
+      list.innerHTML = emptyState('Відкритих звернень немає.');
       return;
     }
     list.innerHTML = escalations.map(escalationCard).join('');
@@ -276,18 +276,18 @@ async function loadEscalations() {
 }
 
 function escalationCard(e) {
-  const clientName = [e.client_first_name, e.client_last_name].filter(Boolean).join(' ') || 'Клиент';
+  const clientName = [e.client_first_name, e.client_last_name].filter(Boolean).join(' ') || 'Клієнт';
   const freelancerName = [e.freelancer_first_name, e.freelancer_last_name].filter(Boolean).join(' ') || 'Фрилансер';
-  const noun = e.parent_contract_id ? 'Этап' : 'Контракт';
+  const noun = e.parent_contract_id ? 'Етап' : 'Контракт';
   return `
     <div class="card mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
           <h6 class="fw-semibold mb-1">${esc(noun)} #${esc(e.contract_number)} — ${esc(formatUAH(e.price))}</h6>
-          <p class="text-muted small mb-0">Клиент: ${esc(clientName)} · Фрилансер: ${esc(freelancerName)}</p>
-          <p class="text-muted small mb-0">Обратился ${timeAgo(e.created_at)}: «${esc(truncateText(e.reason || '', 140))}»</p>
+          <p class="text-muted small mb-0">Клієнт: ${esc(clientName)} · Фрилансер: ${esc(freelancerName)}</p>
+          <p class="text-muted small mb-0">Звернувся ${timeAgo(e.created_at)}: «${esc(truncateText(e.reason || '', 140))}»</p>
         </div>
-        <button class="btn btn-sm btn-primary" onclick="openEscalationDetail(${e.id})">Рассмотреть</button>
+        <button class="btn btn-sm btn-primary" onclick="openEscalationDetail(${e.id})">Розглянути</button>
       </div>
     </div>`;
 }
@@ -296,7 +296,7 @@ let currentEscalation = null; // { escalation, contract, messages, estimates } �
 
 async function openEscalationDetail(id) {
   const body = document.getElementById('escalation-detail-body');
-  body.innerHTML = '<p class="text-muted">Загрузка...</p>';
+  body.innerHTML = '<p class="text-muted">Завантаження...</p>';
   hideError('escalation-detail-error');
   new bootstrap.Modal(document.getElementById('escalationDetailModal')).show();
 
@@ -308,7 +308,7 @@ async function openEscalationDetail(id) {
   }
 }
 
-const ESCALATION_ESTIMATE_STATUS  = { submitted: 'на рассмотрении', accepted: 'утверждена', rejected: 'отклонена' };
+const ESCALATION_ESTIMATE_STATUS  = { submitted: 'на розгляді', accepted: 'затверджено', rejected: 'відхилено' };
 
 // Plain new-tab links — the admin page has no fullscreen gallery overlay.
 function adminFileLinks(files) {
@@ -332,37 +332,37 @@ function renderEscalationDetail() {
     : '—';
   const raisedByName = escalation.raised_by
     ? [escalation.raised_by.first_name, escalation.raised_by.last_name].filter(Boolean).join(' ')
-        || (escalation.raised_by.role === 'client' ? 'Клиент' : 'Фрилансер')
+        || (escalation.raised_by.role === 'client' ? 'Клієнт' : 'Фрилансер')
     : '—';
   const what = contract.parent_contract_id
-    ? `этап #${esc(contract.number)} контракта #${esc(contract.parent_number)}`
+    ? `етап #${esc(contract.number)} контракту #${esc(contract.parent_number)}`
     : `контракт #${esc(contract.number)}`;
 
   const messagesHtml = messages.length
     ? messages.map(m => `
         <div class="mb-2">
-          <div class="small fw-semibold">${esc([m.first_name, m.last_name].filter(Boolean).join(' ') || 'Участник')} <span class="text-muted fw-normal">· ${esc(timeAgo(m.created_at))}</span></div>
+          <div class="small fw-semibold">${esc([m.first_name, m.last_name].filter(Boolean).join(' ') || 'Учасник')} <span class="text-muted fw-normal">· ${esc(timeAgo(m.created_at))}</span></div>
           ${m.body ? `<div class="small" style="white-space:pre-wrap">${esc(m.body)}</div>` : ''}
           ${adminFileLinks(m.attachments)}
         </div>`).join('')
-    : '<p class="text-muted small mb-0">Сообщений нет.</p>';
+    : '<p class="text-muted small mb-0">Повідомлень немає.</p>';
 
-  const SUBMISSION_STATUS = { submitted: 'ждёт решения клиента', accepted: 'принята', rejected: 'возвращена на доработку' };
+  const SUBMISSION_STATUS = { submitted: 'чекає на рішення клієнта', accepted: 'прийнято', rejected: 'повернуто на доопрацювання' };
   const submissionsHtml = submissions.length
     ? submissions.map(s => `
         <div class="border rounded p-2 mb-2">
           <div class="small text-muted">${esc(timeAgo(s.created_at))} · ${esc(SUBMISSION_STATUS[s.status] || s.status)}</div>
           ${s.comment ? `<div class="small" style="white-space:pre-wrap">${esc(s.comment)}</div>` : ''}
           ${adminFileLinks(s.files)}
-          ${s.client_comment ? `<div class="small mt-1"><span class="text-muted">Клиент:</span> ${esc(s.client_comment)}</div>` : ''}
+          ${s.client_comment ? `<div class="small mt-1"><span class="text-muted">Клієнт:</span> ${esc(s.client_comment)}</div>` : ''}
         </div>`).join('')
-    : '<p class="text-muted small mb-0">Работу не сдавали.</p>';
+    : '<p class="text-muted small mb-0">Роботу не здавали.</p>';
 
   const latestEstimate = estimates[0] || null;
   const estimateHtml = latestEstimate ? `
     <div class="table-responsive">
       <table class="table table-sm mb-1">
-        <thead><tr><th>Материал / работа</th><th class="text-end">Кол-во</th><th>Ед.</th><th class="text-end">Цена/ед</th><th class="text-end">Сумма</th></tr></thead>
+        <thead><tr><th>Матеріал / робота</th><th class="text-end">К-сть</th><th>Од.</th><th class="text-end">Ціна/од</th><th class="text-end">Сума</th></tr></thead>
         <tbody>
           ${latestEstimate.items.map(it => `
             <tr>
@@ -373,18 +373,18 @@ function renderEscalationDetail() {
               <td class="text-end">${esc(formatUAH(it.qty * it.unit_price))}</td>
             </tr>`).join('')}
         </tbody>
-        <tfoot><tr><th colspan="4" class="text-end">Итого</th><th class="text-end">${esc(formatUAH(latestEstimate.total))}</th></tr></tfoot>
+        <tfoot><tr><th colspan="4" class="text-end">Разом</th><th class="text-end">${esc(formatUAH(latestEstimate.total))}</th></tr></tfoot>
       </table>
     </div>
     <div class="small text-muted">Статус: ${esc(ESCALATION_ESTIMATE_STATUS[latestEstimate.status] || latestEstimate.status)}</div>
     ${latestEstimate.note ? `<div class="small text-muted">«${esc(latestEstimate.note)}»</div>` : ''}
-  ` : '<p class="text-muted small mb-0">Смета не составлена.</p>';
+  ` : '<p class="text-muted small mb-0">Кошторис не складено.</p>';
 
   body.innerHTML = `
     <div class="mb-3">
-      <h6 class="fw-semibold mb-1">Причина обращения</h6>
+      <h6 class="fw-semibold mb-1">Причина звернення</h6>
       <p class="mb-1">«${esc(escalation.reason || '')}»</p>
-      <p class="text-muted small mb-0">Обратился: ${esc(raisedByName)} · ${esc(timeAgo(escalation.created_at))}</p>
+      <p class="text-muted small mb-0">Звернувся: ${esc(raisedByName)} · ${esc(timeAgo(escalation.created_at))}</p>
     </div>
 
     <div class="row g-3 mb-3">
@@ -392,14 +392,14 @@ function renderEscalationDetail() {
         <h6 class="fw-semibold mb-1">Контракт</h6>
         <dl class="row small mb-0">
           <dt class="col-5 text-muted fw-normal">Тип</dt><dd class="col-7">${esc(what)}</dd>
-          <dt class="col-5 text-muted fw-normal">Цена</dt><dd class="col-7 fw-semibold">${esc(formatUAH(contract.price))}</dd>
-          <dt class="col-5 text-muted fw-normal">Срок</dt><dd class="col-7">${contract.deadline ? esc(contract.deadline) : '—'}</dd>
-          <dt class="col-5 text-muted fw-normal">В эскроу</dt><dd class="col-7">${esc(formatUAH(contract.escrowed_amount))}</dd>
+          <dt class="col-5 text-muted fw-normal">Ціна</dt><dd class="col-7 fw-semibold">${esc(formatUAH(contract.price))}</dd>
+          <dt class="col-5 text-muted fw-normal">Термін</dt><dd class="col-7">${contract.deadline ? esc(contract.deadline) : '—'}</dd>
+          <dt class="col-5 text-muted fw-normal">В ескроу</dt><dd class="col-7">${esc(formatUAH(contract.escrowed_amount))}</dd>
         </dl>
       </div>
       <div class="col-md-6">
-        <h6 class="fw-semibold mb-1">Стороны</h6>
-        <p class="small mb-1">Клиент: ${esc(clientName)}${contract.client ? ' · ' + esc(contract.client.email) : ''}</p>
+        <h6 class="fw-semibold mb-1">Сторони</h6>
+        <p class="small mb-1">Клієнт: ${esc(clientName)}${contract.client ? ' · ' + esc(contract.client.email) : ''}</p>
         <p class="small mb-0">Фрилансер: ${esc(freelancerName)}${contract.freelancer ? ' · ' + esc(contract.freelancer.email) : ''}</p>
       </div>
     </div>
@@ -410,53 +410,53 @@ function renderEscalationDetail() {
     </div>
 
     <div class="mb-3">
-      <h6 class="fw-semibold mb-2">Сдача работы</h6>
+      <h6 class="fw-semibold mb-2">Здача роботи</h6>
       ${submissionsHtml}
     </div>
 
     <div class="mb-4">
-      <h6 class="fw-semibold mb-2">Смета на материалы</h6>
+      <h6 class="fw-semibold mb-2">Кошторис на матеріали</h6>
       ${estimateHtml}
     </div>
 
     <hr>
 
-    <h6 class="fw-semibold mb-2">Решение</h6>
+    <h6 class="fw-semibold mb-2">Рішення</h6>
     <div class="mb-3">
-      <label class="form-label">Комментарий администрации <span class="text-muted small">(увидят обе стороны)</span></label>
+      <label class="form-label">Коментар адміністрації <span class="text-muted small">(побачать обидві сторони)</span></label>
       <textarea class="form-control" id="escalation-note" rows="2"></textarea>
     </div>
 
     <div class="card p-3 mb-2">
-      <div class="fw-semibold small mb-2">Изменить условия без учёта голосов сторон</div>
+      <div class="fw-semibold small mb-2">Змінити умови без урахування голосів сторін</div>
       <div class="row g-2 mb-2">
         <div class="col">
-          <input type="number" class="form-control form-control-sm" id="escalation-new-price" placeholder="Новая цена, ₴" min="1">
+          <input type="number" class="form-control form-control-sm" id="escalation-new-price" placeholder="Нова ціна, ₴" min="1">
         </div>
         <div class="col">
           <input type="date" class="form-control form-control-sm" id="escalation-new-deadline">
         </div>
       </div>
-      <button class="btn btn-sm btn-primary" onclick="resolveEscalation('terms_changed')">Применить</button>
+      <button class="btn btn-sm btn-primary" onclick="resolveEscalation('terms_changed')">Застосувати</button>
     </div>
 
     <div class="d-flex flex-wrap gap-2">
-      <button class="btn btn-sm btn-success" onclick="resolveEscalation('closed_success')">Закрыть: выплата фрилансеру</button>
-      <button class="btn btn-sm btn-outline-secondary" onclick="resolveEscalation('closed_failure')">Закрыть: возврат клиенту (в резерв)</button>
-      <button class="btn btn-sm btn-outline-dark" onclick="resolveEscalation('frozen')">🧊 Заморозить до выяснения</button>
+      <button class="btn btn-sm btn-success" onclick="resolveEscalation('closed_success')">Закрити: виплата фрилансеру</button>
+      <button class="btn btn-sm btn-outline-secondary" onclick="resolveEscalation('closed_failure')">Закрити: повернення клієнту (в резерв)</button>
+      <button class="btn btn-sm btn-outline-dark" onclick="resolveEscalation('frozen')">🧊 Заморозити до з'ясування</button>
     </div>
-    <p class="text-muted small mt-2 mb-0">«Заморозить» — заглушка: только помечает контракт и уведомляет стороны, реальный тикет поддержки и внутрибиржевое расследование пока не реализованы.</p>
+    <p class="text-muted small mt-2 mb-0">«Заморозити» — заглушка: лише позначає контракт і сповіщає сторони, справжній тікет підтримки та внутрішнє розслідування біржі поки не реалізовано.</p>
   `;
 }
 
 async function resolveEscalation(resolution) {
   const labels = {
-    terms_changed:  'изменить условия контракта',
-    closed_success: 'закрыть контракт с выплатой фрилансеру',
-    closed_failure: 'закрыть контракт с возвратом депозита клиенту',
-    frozen:         'заморозить контракт до выяснения',
+    terms_changed:  'змінити умови контракту',
+    closed_success: 'закрити контракт із виплатою фрилансеру',
+    closed_failure: 'закрити контракт із поверненням депозиту клієнту',
+    frozen:         'заморозити контракт до з\'ясування',
   };
-  if (!confirm(`Решение нельзя отменить. ${labels[resolution] || resolution}?`)) return;
+  if (!confirm(`Рішення не можна скасувати. ${labels[resolution] || resolution}?`)) return;
 
   const payload = {
     action: 'resolve_escalation',
@@ -467,7 +467,7 @@ async function resolveEscalation(resolution) {
   if (resolution === 'terms_changed') {
     const price = val('escalation-new-price');
     const deadline = val('escalation-new-deadline');
-    if (!price && !deadline) return showError('escalation-detail-error', 'Укажите новую цену и/или срок');
+    if (!price && !deadline) return showError('escalation-detail-error', 'Вкажіть нову ціну та/або термін');
     if (price) payload.new_price = Number(price);
     if (deadline) payload.new_deadline = deadline;
   }
@@ -483,14 +483,14 @@ async function resolveEscalation(resolution) {
 
 async function viewDocument(userId) {
   const viewer = document.getElementById('document-viewer');
-  viewer.innerHTML = '<p class="text-muted">Загрузка...</p>';
+  viewer.innerHTML = '<p class="text-muted">Завантаження...</p>';
   new bootstrap.Modal(document.getElementById('documentModal')).show();
 
   try {
     const res = await fetch(API + `/admin.php?action=document&user_id=${userId}`, {
       headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
     });
-    if (!res.ok) throw new Error('Не удалось загрузить документ');
+    if (!res.ok) throw new Error('Не вдалося завантажити документ');
 
     const contentType = res.headers.get('Content-Type') || '';
     const blob = await res.blob();

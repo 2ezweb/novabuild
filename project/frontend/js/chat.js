@@ -48,7 +48,7 @@ window.addEventListener('DOMContentLoaded', async () => {
     return;
   }
 
-  const otherName = [otherUser.first_name, otherUser.last_name].filter(Boolean).join(' ') || 'Собеседник';
+  const otherName = [otherUser.first_name, otherUser.last_name].filter(Boolean).join(' ') || 'Співрозмовник';
   renderAvatarEl(document.getElementById('chat-avatar'), otherName, otherUser.avatar_path);
   document.getElementById('chat-title').textContent = otherName;
 
@@ -126,7 +126,7 @@ async function sendMessage(event) {
       for (const f of files) fd.append('files[]', f);
       res = await apiUpload('/messages.php', fd);
       if (res.attachments.length < files.length) {
-        showError('chat-error', `${files.length - res.attachments.length} файл(ов) не прошли проверку формата и не отправлены.`);
+        showError('chat-error', `${files.length - res.attachments.length} файл(ів) не пройшли перевірку формату й не надіслані.`);
       }
     } else {
       res = await apiPost('/messages.php', { conversation_id: conversationId, body: text });
@@ -147,7 +147,7 @@ function onChatFilesChange() {
   const box = document.getElementById('message-files-preview');
   if (!files.length) { box.innerHTML = ''; return; }
   box.innerHTML = files.map(f => `<span class="badge bg-light text-dark border me-1">${fileIcon(f.type || '')} ${esc(truncateText(f.name, 30))}</span>`).join('')
-    + `<button type="button" class="btn btn-link btn-sm p-0 ms-1" onclick="clearChatFiles()">убрать</button>`;
+    + `<button type="button" class="btn btn-link btn-sm p-0 ms-1" onclick="clearChatFiles()">прибрати</button>`;
 }
 
 function clearChatFiles() {
@@ -198,33 +198,33 @@ async function loadContracts() {
 
 // Short status labels for the narrow sidebar badge (full labels stay in the modal).
 const MINI_STATUS = {
-  proposed:  'Предложен',
-  active:    'Активен',
-  completed: 'Выполнен',
-  failed:    'Не выполнен',
-  rejected:  'Отклонён',
+  proposed:  'Запропоновано',
+  active:    'Активний',
+  completed: 'Виконано',
+  failed:    'Не виконано',
+  rejected:  'Відхилено',
 };
 
 function renderContractCards() {
   const el = document.getElementById('contract-cards');
   el.innerHTML = contracts.length
     ? contracts.map(contractChatCard).join('')
-    : '<p class="text-muted small mb-0">Контрактов пока нет.</p>';
+    : '<p class="text-muted small mb-0">Контрактів поки немає.</p>';
 }
 
 function contractChatCard(c) {
   const badge  = `<span class="badge ${CONTRACT_STATUS_BADGE[c.status] || 'bg-secondary'} flex-shrink-0">${esc(MINI_STATUS[c.status] || c.status)}</span>`;
   const staged = c.type === 'staged';
   const title  = staged
-    ? `📄 Поэтапный #${esc(c.number || c.id)}`
+    ? `📄 Поетапний #${esc(c.number || c.id)}`
     : `📄 Контракт #${esc(c.number || c.id)}`;
   const sub = staged
-    ? `${(c.stages || []).length} эт. · ${esc(formatUAH(c.price))}`
+    ? `${(c.stages || []).length} ет. · ${esc(formatUAH(c.price))}`
     : `${esc(formatUAH(c.price))}${c.deadline ? ' · до ' + esc(c.deadline) : ''}`;
   const escrow = c.status === 'active' && Number(c.escrowed_amount) >= 0 && !staged
-    ? `<div class="text-muted mt-1" style="font-size:.8rem">эскроу: ${esc(formatUAH(c.escrowed_amount))} / ${esc(formatUAH(c.price))}</div>`
+    ? `<div class="text-muted mt-1" style="font-size:.8rem">ескроу: ${esc(formatUAH(c.escrowed_amount))} / ${esc(formatUAH(c.price))}</div>`
     : (staged && Number(c.escrowed_amount) > 0
-        ? `<div class="text-muted mt-1" style="font-size:.8rem">в эскроу: ${esc(formatUAH(c.escrowed_amount))}</div>` : '');
+        ? `<div class="text-muted mt-1" style="font-size:.8rem">в ескроу: ${esc(formatUAH(c.escrowed_amount))}</div>` : '');
 
   return `
     <div class="card mb-2 p-2 border-primary" role="button" onclick="openContractModal(${c.id})">
@@ -243,14 +243,14 @@ function contractChatCard(c) {
 function contractChatHint(c) {
   if (c.status === 'proposed') {
     return currentUser.role === 'freelancer'
-      ? '<div class="text-primary mt-1" style="font-size:.8rem">⏳ ждёт вашего решения</div>'
-      : '<div class="text-muted mt-1" style="font-size:.8rem">ждёт ответа фрилансера</div>';
+      ? '<div class="text-primary mt-1" style="font-size:.8rem">⏳ чекає на ваше рішення</div>'
+      : '<div class="text-muted mt-1" style="font-size:.8rem">чекає на відповідь фрилансера</div>';
   }
   if (c.status === 'active' && c.type !== 'staged') {
     if (currentUser.role === 'client') {
       const remaining = Math.max(0, Number(c.price) - Number(c.escrowed_amount || 0));
       if (remaining > 0) {
-        return `<div class="text-primary mt-1" style="font-size:.8rem">💳 к оплате: ${esc(formatUAH(remaining))}</div>`;
+        return `<div class="text-primary mt-1" style="font-size:.8rem">💳 до сплати: ${esc(formatUAH(remaining))}</div>`;
       }
     } else {
       // Freelancer: whether the client actually paid the reserve, at a glance —
@@ -285,7 +285,7 @@ async function loadClientOffers() {
 
 function renderProposeOfferOptions() {
   const sel = document.getElementById('propose-offer-select');
-  sel.innerHTML = '<option value="">— без привязки к офферу —</option>'
+  sel.innerHTML = '<option value="">— без прив\'язки до офера —</option>'
     + clientOpenOffers.map(o => `<option value="${o.id}">${esc(o.title)}${o.budget ? ' — ' + esc(formatUAH(o.budget)) : ''}</option>`).join('');
 }
 
@@ -334,13 +334,13 @@ function proposeType() {
 function onProposeTypeChange() {
   const staged = proposeType() === 'staged';
   document.getElementById('propose-stage-title-wrap').style.display = staged ? '' : 'none';
-  document.getElementById('propose-price-label').textContent    = staged ? 'Цена первого этапа, ₴' : 'Цена, ₴';
+  document.getElementById('propose-price-label').textContent    = staged ? 'Ціна першого етапу, ₴' : 'Ціна, ₴';
   document.getElementById('propose-deadline-label').innerHTML   = staged
-    ? 'Срок первого этапа <span class="text-muted small">(опционально)</span>'
-    : 'Срок <span class="text-muted small">(опционально)</span>';
+    ? 'Термін першого етапу <span class="text-muted small">(необов\'язково)</span>'
+    : 'Термін <span class="text-muted small">(необов\'язково)</span>';
   document.getElementById('propose-type-hint').textContent = staged
-    ? 'Договор за первый этап; следующие формируются по мере выполнения. Каждый этап — мини-контракт.'
-    : 'Договорились за цену и срок, сделали работу — закрыли.';
+    ? 'Домовляєтеся про перший етап; наступні формуються в міру виконання. Кожен етап — міні-контракт.'
+    : 'Домовилися про ціну й термін, зробили роботу — закрили.';
 }
 
 async function submitPropose() {
@@ -351,8 +351,8 @@ async function submitPropose() {
   const stageTitle = val('propose-stage-title');
   const offerId = Number(document.getElementById('propose-offer-select').value) || null;
 
-  if (!price || price <= 0) return showError('propose-error', 'Укажите цену');
-  if (type === 'staged' && !stageTitle) return showError('propose-error', 'Укажите название первого этапа');
+  if (!price || price <= 0) return showError('propose-error', 'Вкажіть ціну');
+  if (type === 'staged' && !stageTitle) return showError('propose-error', 'Вкажіть назву першого етапу');
 
   const payload = {
     action: 'propose',

@@ -20,8 +20,8 @@ function fillProfileForm() {
   const lastNameHint = document.querySelector('#last-name-field .text-muted');
   if (lastNameHint) {
     lastNameHint.textContent = role === 'client'
-      ? '(видна только администратору)'
-      : '(другим видна как «Имя Ф.»)';
+      ? '(бачить лише адміністратор)'
+      : '(іншим видно як «Ім\'я П.»)';
   }
 
   if (role === 'freelancer') {
@@ -59,13 +59,13 @@ function renderBalanceBlock() {
     const frozen = currentUser.frozen_amount || 0;
     document.getElementById('balance-amount').textContent = formatUAH(currentUser.balance);
     hint.textContent = (frozen > 0
-      ? `Из них ${formatUAH(frozen)} заморожено (возврат по невыполненному контракту, 7 дней на спор) — пока недоступно. `
-      : 'Пополняется автоматически, если контракт закрыт как невыполненный — депозит возвращается сюда. ')
-      + 'При оплате следующего контракта сначала списывается доступный баланс, остаток — картой.';
+      ? `З них ${formatUAH(frozen)} заморожено (повернення за невиконаним контрактом, 7 днів на спір) — поки недоступно. `
+      : 'Поповнюється автоматично, якщо контракт закрито як невиконаний — депозит повертається сюди. ')
+      + 'Під час оплати наступного контракту спершу списується доступний баланс, решта — карткою.';
     action.innerHTML = `<div class="alert alert-info small py-2 mb-0" style="max-width:360px">ℹ️ ${esc(CLIENT_WITHDRAW_NOTICE)}</div>`;
   } else {
     document.getElementById('balance-amount').textContent = formatUAH(currentUser.balance);
-    hint.textContent = 'Зачисляется автоматически, когда клиент закрывает контракт как выполненный.';
+    hint.textContent = 'Зараховується автоматично, коли клієнт закриває контракт як виконаний.';
     loadWithdrawalStatus();
   }
 }
@@ -79,8 +79,8 @@ async function loadWithdrawalStatus() {
 
     const pending = res.requests.find(r => r.status === 'pending');
     action.innerHTML = pending
-      ? `<span class="text-muted small">⏳ Заявка на вывод ${formatUAH(pending.amount)} в обработке</span>`
-      : `<button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#withdrawalModal" onclick="openWithdrawalModal()">Вывести</button>`;
+      ? `<span class="text-muted small">⏳ Заявка на виведення ${formatUAH(pending.amount)} в обробці</span>`
+      : `<button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#withdrawalModal" onclick="openWithdrawalModal()">Вивести</button>`;
   } catch {
     action.innerHTML = '';
   }
@@ -95,8 +95,8 @@ function openWithdrawalModal() {
 async function submitWithdrawal() {
   hideError('withdrawal-error');
   const amount = Number(val('withdrawal-amount'));
-  if (!amount || amount <= 0) return showError('withdrawal-error', 'Укажите сумму');
-  if (amount > (currentUser.balance ?? 0)) return showError('withdrawal-error', 'Недостаточно средств на балансе');
+  if (!amount || amount <= 0) return showError('withdrawal-error', 'Вкажіть суму');
+  if (amount > (currentUser.balance ?? 0)) return showError('withdrawal-error', 'Недостатньо коштів на балансі');
 
   try {
     await apiPost('/wallet.php', { action: 'request_withdrawal', amount });
@@ -113,14 +113,14 @@ function renderVerificationAction() {
 
   const status = currentUser.verification_status;
   if (status === 'pending') {
-    el.innerHTML = '<span class="text-muted small">⏳ Заявка на рассмотрении</span>';
+    el.innerHTML = '<span class="text-muted small">⏳ Заявка на розгляді</span>';
   } else if (status === 'verified') {
     el.innerHTML = '';
   } else {
     el.innerHTML = `
-      ${status === 'rejected' ? '<div class="text-danger small mb-1">Предыдущая заявка отклонена</div>' : ''}
+      ${status === 'rejected' ? '<div class="text-danger small mb-1">Попередню заявку відхилено</div>' : ''}
       <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#verificationModal">
-        Подать заявку на верификацию
+        Подати заявку на верифікацію
       </button>`;
   }
 }
@@ -181,7 +181,7 @@ async function uploadAvatar(input) {
 async function submitVerification() {
   hideError('verification-error');
   const file = document.getElementById('verification-file').files[0];
-  if (!file) return showError('verification-error', 'Выберите файл');
+  if (!file) return showError('verification-error', 'Оберіть файл');
 
   const formData = new FormData();
   formData.append('document', file);

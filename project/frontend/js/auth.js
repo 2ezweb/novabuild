@@ -26,7 +26,7 @@ async function doRegister() {
   const password = val('reg-password');
   const role     = val('reg-role');
   hideError('reg-error');
-  if (!role) return showError('reg-error', 'Выберите роль');
+  if (!role) return showError('reg-error', 'Оберіть роль');
   try {
     await apiPost('/auth.php', { action: 'register', email, password, role });
     localStorage.setItem('pending_email', email);

@@ -14,13 +14,13 @@ $me = require_auth();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
 if (empty($_FILES['avatar']) || $_FILES['avatar']['error'] !== UPLOAD_ERR_OK) {
     http_response_code(422);
-    echo json_encode(['error' => 'Файл не загружен']);
+    echo json_encode(['error' => 'Файл не завантажено']);
     exit;
 }
 
@@ -28,7 +28,7 @@ $tmpPath = $_FILES['avatar']['tmp_name'];
 
 if ($_FILES['avatar']['size'] > 5 * 1024 * 1024) {
     http_response_code(422);
-    echo json_encode(['error' => 'Файл больше 5МБ']);
+    echo json_encode(['error' => 'Файл більший за 5 МБ']);
     exit;
 }
 
@@ -39,7 +39,7 @@ finfo_close($finfo);
 
 if (!in_array($mime, ['image/jpeg', 'image/png'], true)) {
     http_response_code(422);
-    echo json_encode(['error' => 'Разрешены только JPEG и PNG']);
+    echo json_encode(['error' => 'Дозволені лише JPEG і PNG']);
     exit;
 }
 
@@ -51,7 +51,7 @@ $destPath = $destDir . $filename;
 
 if (!resize_square_image($tmpPath, $destPath, 200)) {
     http_response_code(422);
-    echo json_encode(['error' => 'Не удалось обработать изображение']);
+    echo json_encode(['error' => 'Не вдалося обробити зображення']);
     exit;
 }
 

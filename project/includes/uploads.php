@@ -18,7 +18,7 @@ const UPLOAD_ALLOWED_TYPES = [
     'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'],
 ];
 
-const UPLOAD_FORMATS_HINT = 'png/jpg/pdf/docx/xlsx, до 15МБ каждый, не больше ' . UPLOAD_MAX_FILES . ' файлов за раз';
+const UPLOAD_FORMATS_HINT = 'png/jpg/pdf/docx/xlsx, до 15 МБ кожен, не більше ' . UPLOAD_MAX_FILES . ' файлів за раз';
 
 // Saves every valid file from a multi-file <input name="files[]"> field into
 // uploads/<subdir>/ under a random name. Invalid files are skipped silently;

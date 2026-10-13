@@ -41,7 +41,7 @@ function conversation_or_403(PDO $db, int $conversationId, int $userId): array {
 
     if (!$conv || ((int)$conv['client_user_id'] !== $userId && (int)$conv['freelancer_user_id'] !== $userId)) {
         http_response_code(403);
-        echo json_encode(['error' => 'Not a participant of this conversation']);
+        echo json_encode(['error' => 'Ви не є учасником цієї переписки']);
         exit;
     }
     return $conv;
@@ -52,7 +52,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $conversationId = (int) ($_GET['conversation_id'] ?? 0);
     if (!$conversationId) {
         http_response_code(422);
-        echo json_encode(['error' => 'conversation_id is required']);
+        echo json_encode(['error' => 'Не вказано переписку (conversation_id)']);
         exit;
     }
 
@@ -85,17 +85,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$conversationId) {
         http_response_code(422);
-        echo json_encode(['error' => 'conversation_id is required']);
+        echo json_encode(['error' => 'Не вказано переписку (conversation_id)']);
         exit;
     }
     if ($text === '' && !$hasFiles) {
         http_response_code(422);
-        echo json_encode(['error' => 'Сообщение не может быть пустым']);
+        echo json_encode(['error' => 'Повідомлення не може бути порожнім']);
         exit;
     }
     if (mb_strlen($text) > 5000) {
         http_response_code(422);
-        echo json_encode(['error' => 'Сообщение слишком длинное']);
+        echo json_encode(['error' => 'Повідомлення задовге']);
         exit;
     }
 
@@ -105,7 +105,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $saved = $hasFiles ? store_uploaded_files($_FILES['files'], 'chat') : [];
     if ($hasFiles && !$saved && $text === '') {
         http_response_code(422);
-        echo json_encode(['error' => 'Файлы не прошли проверку: ' . UPLOAD_FORMATS_HINT]);
+        echo json_encode(['error' => 'Файли не пройшли перевірку: ' . UPLOAD_FORMATS_HINT]);
         exit;
     }
 
@@ -131,7 +131,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     pusher_trigger("private-conversation-{$conversationId}", 'new-message', $message);
 
-    create_notification($db, $otherUserId, 'new_message', $saved && $text === '' ? 'Вам прислали файл в чате' : 'Новое сообщение в чате');
+    create_notification($db, $otherUserId, 'new_message', $saved && $text === '' ? 'Вам надіслали файл у чаті' : 'Нове повідомлення в чаті');
 
     http_response_code(201);
     echo json_encode($message + ['files_requested' => $hasFiles ? count($_FILES['files']['name']) : 0]);
@@ -139,4 +139,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+echo json_encode(['error' => 'Метод не підтримується']);

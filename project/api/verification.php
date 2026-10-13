@@ -14,13 +14,13 @@ $me = require_auth();
 
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(405);
-    echo json_encode(['error' => 'Method not allowed']);
+    echo json_encode(['error' => 'Метод не підтримується']);
     exit;
 }
 
 if ($me['role'] === 'admin') {
     http_response_code(400);
-    echo json_encode(['error' => 'Админам верификация не нужна']);
+    echo json_encode(['error' => 'Адміністраторам верифікація не потрібна']);
     exit;
 }
 
@@ -32,24 +32,24 @@ $user = $stmt->fetch();
 
 if ($user['verification_status'] === 'pending') {
     http_response_code(409);
-    echo json_encode(['error' => 'Заявка уже на рассмотрении']);
+    echo json_encode(['error' => 'Заявка вже на розгляді']);
     exit;
 }
 if ($user['verification_status'] === 'verified') {
     http_response_code(409);
-    echo json_encode(['error' => 'Профиль уже верифицирован']);
+    echo json_encode(['error' => 'Профіль уже верифіковано']);
     exit;
 }
 
 if (empty($_FILES['document']) || $_FILES['document']['error'] !== UPLOAD_ERR_OK) {
     http_response_code(422);
-    echo json_encode(['error' => 'Файл не загружен']);
+    echo json_encode(['error' => 'Файл не завантажено']);
     exit;
 }
 
 if ($_FILES['document']['size'] > 10 * 1024 * 1024) {
     http_response_code(422);
-    echo json_encode(['error' => 'Файл больше 10МБ']);
+    echo json_encode(['error' => 'Файл більший за 10 МБ']);
     exit;
 }
 
@@ -62,7 +62,7 @@ finfo_close($finfo);
 $allowedExt = ['application/pdf' => 'pdf', 'image/jpeg' => 'jpg', 'image/png' => 'png'];
 if (!isset($allowedExt[$mime])) {
     http_response_code(422);
-    echo json_encode(['error' => 'Разрешены только PDF, JPEG и PNG']);
+    echo json_encode(['error' => 'Дозволені лише PDF, JPEG і PNG']);
     exit;
 }
 
@@ -72,7 +72,7 @@ $destPath = $destDir . $filename;
 
 if (!move_uploaded_file($tmpPath, $destPath)) {
     http_response_code(500);
-    echo json_encode(['error' => 'Не удалось сохранить файл']);
+    echo json_encode(['error' => 'Не вдалося зберегти файл']);
     exit;
 }
 
@@ -90,6 +90,6 @@ if ($oldPath) {
 }
 
 $name = trim($user['first_name'] ?? $user['email']);
-notify_admins($db, 'verification_submitted', "Новая заявка на верификацию от {$name} ({$user['email']})");
+notify_admins($db, 'verification_submitted', "Нова заявка на верифікацію від {$name} ({$user['email']})");
 
 echo json_encode(['status' => 'pending']);

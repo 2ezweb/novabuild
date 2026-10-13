@@ -20,7 +20,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $offer_id = (int)($_GET['offer_id'] ?? 0);
         if (!$offer_id) {
             http_response_code(422);
-            echo json_encode(['error' => 'offer_id is required']);
+            echo json_encode(['error' => 'Не вказано офер (offer_id)']);
             exit;
         }
 
@@ -33,7 +33,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $stmt->execute([$offer_id, $me['user_id']]);
         if (!$stmt->fetch()) {
             http_response_code(404);
-            echo json_encode(['error' => 'Offer not found']);
+            echo json_encode(['error' => 'Офер не знайдено']);
             exit;
         }
 
@@ -70,7 +70,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     if ($me['role'] !== 'freelancer') {
         http_response_code(403);
-        echo json_encode(['error' => 'Freelancers only']);
+        echo json_encode(['error' => 'Лише для фрилансерів']);
         exit;
     }
 
@@ -91,7 +91,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if ($me['role'] !== 'freelancer') {
         http_response_code(403);
-        echo json_encode(['error' => 'Only freelancers can place bids']);
+        echo json_encode(['error' => 'Подавати заявки можуть лише фрилансери']);
         exit;
     }
 
@@ -102,12 +102,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$offer_id) {
         http_response_code(422);
-        echo json_encode(['error' => 'offer_id is required']);
+        echo json_encode(['error' => 'Не вказано офер (offer_id)']);
         exit;
     }
     if ($connects < MIN_CONNECTS) {
         http_response_code(422);
-        echo json_encode(['error' => 'Минимальная ставка — ' . MIN_CONNECTS . ' коннектов']);
+        echo json_encode(['error' => 'Мінімальна ставка — ' . MIN_CONNECTS . ' конектів']);
         exit;
     }
 
@@ -118,12 +118,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$offer) {
         http_response_code(404);
-        echo json_encode(['error' => 'Offer not found']);
+        echo json_encode(['error' => 'Офер не знайдено']);
         exit;
     }
     if ($offer['status'] !== 'open') {
         http_response_code(409);
-        echo json_encode(['error' => 'Offer is no longer open']);
+        echo json_encode(['error' => 'Офер уже закритий']);
         exit;
     }
 
@@ -134,12 +134,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if (!$profile) {
         http_response_code(404);
-        echo json_encode(['error' => 'Freelancer profile not found']);
+        echo json_encode(['error' => 'Профіль фрилансера не знайдено']);
         exit;
     }
     if ($connects > $profile['connects_balance']) {
         http_response_code(422);
-        echo json_encode(['error' => 'Недостаточно коннектов']);
+        echo json_encode(['error' => 'Недостатньо конектів']);
         exit;
     }
 
@@ -161,7 +161,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $db->rollBack();
         if ($e->getCode() === '23000') {
             http_response_code(409);
-            echo json_encode(['error' => 'You have already applied to this offer']);
+            echo json_encode(['error' => 'Ви вже подали заявку на цей офер']);
             exit;
         }
         throw $e;
@@ -177,4 +177,4 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 http_response_code(405);
-echo json_encode(['error' => 'Method not allowed']);
+echo json_encode(['error' => 'Метод не підтримується']);
