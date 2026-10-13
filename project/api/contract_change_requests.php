@@ -56,9 +56,17 @@ if ($action === 'propose') {
     $contractId = (int) ($body['contract_id'] ?? 0);
     $contract   = contract_participant_or_404($db, $contractId, $me['user_id']);
 
-    if ($contract['status'] !== 'active') {
+    // Active contract/stage — or a not-yet-started stage of an accepted plan
+    // («За планом»), whose price/deadline the parties may still adjust.
+    $changeable = $contract['status'] === 'active';
+    if ($contract['status'] === 'planned' && $contract['parent_contract_id']) {
+        $stmt = $db->prepare('SELECT status FROM contracts WHERE id = ?');
+        $stmt->execute([$contract['parent_contract_id']]);
+        $changeable = $stmt->fetchColumn() === 'active';
+    }
+    if (!$changeable) {
         http_response_code(409);
-        echo json_encode(['error' => 'Зміни можна пропонувати лише для активного контракту']);
+        echo json_encode(['error' => 'Зміни можна пропонувати лише для активного контракту або етапу за планом']);
         exit;
     }
     if ($contract['type'] === 'staged' && $contract['parent_contract_id'] === null) {

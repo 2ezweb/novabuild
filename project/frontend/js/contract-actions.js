@@ -22,6 +22,7 @@ const CONTRACT_STATUS_LABELS = {
   completed: 'Виконано',
   failed:    'Не виконано',
   rejected:  'Відхилено',
+  planned:   'За планом',
 };
 const CONTRACT_STATUS_BADGE = {
   proposed:  'bg-warning text-dark',
@@ -29,7 +30,32 @@ const CONTRACT_STATUS_BADGE = {
   completed: 'bg-success',
   failed:    'bg-danger',
   rejected:  'bg-secondary',
+  planned:   'bg-light text-dark border',
 };
+
+// Staged contract "весь план одразу": stages 2..N wait as 'planned' and start
+// one by one (api/contracts.php propose, includes/staged.php).
+function cmIsPlannedParent(c) { return cmIsStagedParent(c) && c.stage_mode === 'planned'; }
+function cmParentOf(c) { return c.parent_contract_id ? _cmCtx.getContract(c.parent_contract_id) : null; }
+// A not-yet-started stage of an ACCEPTED plan — estimate / change terms allowed.
+function cmIsPlannedStageOfActivePlan(c) {
+  const p = cmParentOf(c);
+  return c.status === 'planned' && p && p.status === 'active';
+}
+// The stage the client can start by hand (after a failed one): the first
+// 'planned' stage, when nothing is proposed/active right now.
+// Stage 1 of a plan nobody has accepted yet — accepting/rejecting it = the whole plan.
+function cmIsPlanApproval(c) {
+  const p = cmParentOf(c);
+  return c.status === 'proposed' && p && cmIsPlannedParent(p) && p.status === 'proposed';
+}
+
+function cmNextPlannedStage(parent) {
+  if (!parent || !cmIsPlannedParent(parent) || parent.status !== 'active') return null;
+  const stages = parent.stages || [];
+  if (stages.some(s => s.status === 'proposed' || s.status === 'active')) return null;
+  return stages.find(s => s.status === 'planned') || null;
+}
 
 let _cmCtx  = { me: null, getContract: () => null, reload: async () => {}, showChatLink: true };
 let _cmOpen = null;      // contract currently shown in #contractModal
@@ -72,6 +98,15 @@ function paymentBadgeHtml(c) {
   if (p === 'partial') return '<span class="text-warning" style="font-size:.75rem">⚠️ частково оплачено</span>';
   if (p === 'none')    return '<span class="text-danger" style="font-size:.75rem">❌ не оплачено</span>';
   return '';
+}
+
+// Human name that tells parallel contracts with the same person apart:
+// its own title (stage title for a stage), else the linked offer's title.
+// The old auto-title of staged parents isn't a real name — ignored.
+const LEGACY_STAGED_TITLES = ['Поетапний контракт', 'Поэтапный контракт'];
+function contractName(c) {
+  if (c.title && !LEGACY_STAGED_TITLES.includes(c.title)) return c.title;
+  return c.offer_title || '';
 }
 
 function cmHeading(c) {
@@ -117,11 +152,13 @@ async function cmLoadDetails(c) {
     try { _cmReview = (await apiFetch(`/reviews.php?contract_id=${c.id}`)).review; } catch { _cmReview = undefined; }
   }
   if (cmIsStagedParent(c)) return;   // change/dispute/estimate/escalation/hand-over live on stages, not the parent
-  if (c.status !== 'proposed') {
+  if (c.status !== 'proposed' && c.status !== 'planned') {
     try { _cmSubmissions = await apiFetch(`/work_submissions.php?contract_id=${c.id}`); } catch { /* keep [] */ }
   }
-  if (c.status === 'active') {
+  if (c.status === 'active' || cmIsPlannedStageOfActivePlan(c)) {
     try { _cmChange = await apiFetch(`/contract_change_requests.php?contract_id=${c.id}`); } catch { /* keep null */ }
+  }
+  if (c.status === 'active') {
     try { _cmEscalation = await apiFetch(`/escalations.php?contract_id=${c.id}`); } catch { /* keep null */ }
   }
   if (c.status === 'failed' && _cmCtx.me.role === 'freelancer') {
@@ -168,7 +205,11 @@ function cmRenderBody(c) {
     }
   }
 
-  const typeRow = `<dt class="col-5 fw-normal text-muted">Тип</dt>
+  const name = contractName(c);
+  const nameRow = name
+    ? `<dt class="col-5 fw-normal text-muted">Назва</dt><dd class="col-7 mb-2 fw-semibold">${esc(name)}</dd>`
+    : '';
+  const typeRow = nameRow + `<dt class="col-5 fw-normal text-muted">Тип</dt>
     <dd class="col-7 mb-2">${c.type === 'staged' ? 'поетапний' : 'повний'}</dd>`;
   const parentRow = c.parent_contract_id
     ? `<dt class="col-5 fw-normal text-muted">Контракт</dt>
@@ -187,6 +228,8 @@ function cmRenderBody(c) {
     const done = stages.filter(s => s.status === 'completed').length;
     dl = `
       ${typeRow}
+      <dt class="col-5 fw-normal text-muted">Етапи</dt>
+      <dd class="col-7 mb-2">${cmIsPlannedParent(c) ? 'весь план одразу' : 'поступово, по одному'}</dd>
       <dt class="col-5 fw-normal text-muted">Етапів</dt>
       <dd class="col-7 mb-2">${stages.length} <span class="text-muted">(завершено ${done})</span></dd>
       <dt class="col-5 fw-normal text-muted">Сума за етапами</dt>
@@ -230,17 +273,44 @@ function cmStagesSection(c) {
     </div>`).join('') || '<p class="text-muted small mb-1">Етапів поки немає.</p>';
 
   const last = stages[stages.length - 1];
-  const canAdd = _cmCtx.me.role === 'client'
+  const isClient = _cmCtx.me.role === 'client';
+  const planLeft = stages.some(s => s.status === 'planned');
+  const nextPlanned = cmNextPlannedStage(c);
+  const canAdd = isClient
     && c.status === 'active'
     && (!last || ['completed', 'failed', 'rejected'].includes(last.status));
   let addBtn = '';
-  if (canAdd) {
-    addBtn = `<button class="btn btn-sm btn-outline-primary mt-1" onclick="cmOpenStage()">＋ Сформувати наступний етап</button>`;
-  } else if (_cmCtx.me.role === 'client' && c.status === 'active') {
+  if (nextPlanned && isClient) {
+    // After a failed stage the plan waits for the client: carry on or close the contract.
+    addBtn = `<button class="btn btn-sm btn-primary mt-1" onclick="cmStartNextStage()">▶ Розпочати етап ${nextPlanned.seq} за планом</button>`;
+  } else if (planLeft && c.status === 'active') {
+    addBtn = `<p class="text-muted small mt-1 mb-0">Наступні етапи плану стартують автоматично після успішного завершення поточного.</p>`;
+  } else if (canAdd) {
+    addBtn = `<button class="btn btn-sm btn-outline-primary mt-1" onclick="cmOpenStage()">＋ ${cmIsPlannedParent(c) ? 'Додати етап понад план' : 'Сформувати наступний етап'}</button>`;
+  } else if (isClient && c.status === 'active') {
     addBtn = `<p class="text-muted small mt-1 mb-0">Наступний етап можна сформувати після завершення поточного.</p>`;
   }
 
   return `<div class="mt-3"><div class="fw-semibold small mb-2">Етапи</div>${rows}${addBtn}</div>`;
+}
+
+// Pending "змінити умови" request — on an active contract/stage or a stage «За планом».
+function cmChangeBlock() {
+  const me = _cmCtx.me;
+  const mine = Number(_cmChange.proposed_by) === me.id;
+  const parts = [];
+  if (_cmChange.new_price)    parts.push(`ціна → ${formatUAH(_cmChange.new_price)}`);
+  if (_cmChange.new_deadline) parts.push(`термін → ${_cmChange.new_deadline}`);
+  const desc = esc(parts.join(', '));
+  return mine
+    ? `<div class="alert alert-warning mt-3 mb-0">Ви запропонували зміни (${desc}). Очікує відповіді другої сторони.</div>`
+    : `<div class="alert alert-warning mt-3 mb-0">
+         <div class="mb-2">Вам запропонували змінити умови: ${desc}</div>
+         <div class="d-flex gap-2">
+           <button class="btn btn-sm btn-success" onclick="cmRespondChange(true)">Прийняти</button>
+           <button class="btn btn-sm btn-outline-danger" onclick="cmRespondChange(false)">Відхилити</button>
+         </div>
+       </div>`;
 }
 
 function cmRenderExtra(c) {
@@ -248,7 +318,11 @@ function cmRenderExtra(c) {
 
   if (cmIsStagedParent(c)) {
     let out = cmStagesSection(c);
-    if (c.status === 'proposed')  out += `<div class="alert alert-primary mt-3 mb-0">Чекає, поки фрилансер прийме перший етап — відкрийте його в списку вище.</div>`;
+    if (c.status === 'proposed') {
+      out += cmIsPlannedParent(c)
+        ? `<div class="alert alert-primary mt-3 mb-0">План із ${(c.stages || []).length} етапів чекає на підтвердження фрилансером. ${me.role === 'freelancer' ? 'Відкрийте етап 1 — його підтвердження означає згоду з усім планом.' : 'Підтвердження етапу 1 означає згоду з усім планом.'}</div>`
+        : `<div class="alert alert-primary mt-3 mb-0">Чекає, поки фрилансер прийме перший етап — відкрийте його в списку вище.</div>`;
+    }
     if (c.status === 'completed') out += `<div class="alert alert-success mt-3 mb-0">✅ Поетапний контракт завершено.</div>`;
     if (c.status === 'failed')    out += `<div class="alert alert-danger mt-3 mb-0">Поетапний контракт розірвано. Незавершені етапи закрито, депозити повернулися на баланс клієнта із 7-денним заморожуванням.</div>`;
     if (c.status === 'rejected')  out += `<div class="alert alert-secondary mt-3 mb-0">Поетапний контракт відхилено.</div>`;
@@ -264,10 +338,27 @@ function cmRenderExtra(c) {
     out += `<div class="alert alert-dark mt-3 mb-0">🧊 ${isStage ? 'Етап' : 'Контракт'} заморожено адміністрацією ${esc(cmFmtDate(c.frozen_at))} — триває розгляд, дочекайтеся рішення.</div>`;
   }
 
-  if (c.status === 'proposed') {
+  const parent = cmParentOf(c);
+  const planApproval = cmIsPlanApproval(c);
+
+  if (planApproval) {
+    // Stage 1 of a not-yet-accepted plan: deciding on it = deciding on the whole plan.
+    const n = (parent.stages || []).length;
+    out += me.role === 'freelancer'
+      ? `<div class="alert alert-primary mt-3 mb-0">Вам запропонували поетапний контракт із планом (етапів: ${n}). Підтвердження цього етапу означає згоду з <b>усім планом</b>: наступні етапи стартуватимуть по черзі, автоматично після успішного завершення попереднього. Відхилення — відхиляє весь план. Дії — через меню ⋮ угорі ліворуч.</div>`
+      : `<div class="alert alert-secondary mt-3 mb-0">План із ${n} етапів очікує підтвердження фрилансером.</div>`;
+  } else if (c.status === 'proposed') {
     out += me.role === 'freelancer'
       ? `<div class="alert alert-primary mt-3 mb-0">Вам запропонували ${noun}. Через меню ⋮ угорі ліворуч — підтвердити або відхилити.${isStage ? '' : ' Хочете інші умови — відхиліть і обговоріть їх у переписці.'}</div>`
       : `<div class="alert alert-secondary mt-3 mb-0">Очікує підтвердження фрилансером.</div>`;
+  }
+
+  if (c.status === 'planned') {
+    const next = cmNextPlannedStage(parent);
+    out += parent && parent.status === 'active'
+      ? `<div class="alert alert-light border mt-3 mb-0">📅 Етап за планом. Розпочнеться автоматично після успішного завершення попереднього етапу${next && next.id === c.id ? ' — або клієнт розпочне його вручну' : ''}. Поки що можна скласти й погодити кошторис та за потреби змінити умови етапу.</div>`
+      : `<div class="alert alert-light border mt-3 mb-0">📅 Етап плану. Стане доступним, коли фрилансер підтвердить план.</div>`;
+    if (_cmChange) out += cmChangeBlock();
   }
 
   if (c.status === 'active') {
@@ -281,25 +372,16 @@ function cmRenderExtra(c) {
     }
 
     const remaining = Math.max(0, Number(c.price) - Number(c.escrowed_amount || 0));
-    if (me.role === 'client' && remaining > 0) {
+    const blockReason = cmDepositBlockReason();
+    if (remaining > 0 && blockReason) {
+      // Deposit opens only after an estimate with both «Роботи» and «Матеріали» (escrow.php).
+      out += me.role === 'client'
+        ? `<div class="alert alert-light border mt-3 mb-0">📋 ${esc(blockReason)}</div>`
+        : `<div class="alert alert-primary mt-3 mb-0">📋 Складіть кошторис (роботи й матеріали) — без нього клієнт не може внести депозит.</div>`;
+    } else if (me.role === 'client' && remaining > 0) {
       out += `<button class="btn btn-primary w-100 mt-3" onclick="cmOpenDeposit()">💳 Оплатити ${noun} — залишилось ${esc(formatUAH(remaining))}</button>`;
     }
-    if (_cmChange) {
-      const mine = Number(_cmChange.proposed_by) === me.id;
-      const parts = [];
-      if (_cmChange.new_price)    parts.push(`ціна → ${formatUAH(_cmChange.new_price)}`);
-      if (_cmChange.new_deadline) parts.push(`термін → ${_cmChange.new_deadline}`);
-      const desc = esc(parts.join(', '));
-      out += mine
-        ? `<div class="alert alert-warning mt-3 mb-0">Ви запропонували зміни (${desc}). Очікує відповіді другої сторони.</div>`
-        : `<div class="alert alert-warning mt-3 mb-0">
-             <div class="mb-2">Вам запропонували змінити умови: ${desc}</div>
-             <div class="d-flex gap-2">
-               <button class="btn btn-sm btn-success" onclick="cmRespondChange(true)">Прийняти</button>
-               <button class="btn btn-sm btn-outline-danger" onclick="cmRespondChange(false)">Відхилити</button>
-             </div>
-           </div>`;
-    }
+    if (_cmChange) out += cmChangeBlock();
   }
 
   if (c.status === 'failed') {
@@ -321,7 +403,8 @@ function cmRenderExtra(c) {
 
   // Смета is part of this specific contract/stage — it never existed before
   // the contract went active, and its history stays visible after it closes.
-  if (c.status === 'active' || c.status === 'completed' || c.status === 'failed') {
+  // A stage «За планом» of an accepted plan gets its estimate up front.
+  if (c.status === 'active' || c.status === 'completed' || c.status === 'failed' || cmIsPlannedStageOfActivePlan(c)) {
     out += cmEstimateSection(c);
   }
 
@@ -350,10 +433,35 @@ function cmStageNextStepPanel(c) {
   const parent = _cmCtx.getContract(c.parent_contract_id);
   if (!parent || parent.status !== 'active') return '';
   const stages = parent.stages || [];
+  const me = _cmCtx.me;
+
+  // Planned contract with stages left: the plan goes on instead of "сформувати".
+  const after = stages.find(s => s.seq === c.seq + 1);
+  if (after && cmIsPlannedParent(parent)) {
+    if (after.status === 'active' || after.status === 'proposed') {
+      return `<div class="alert alert-info mt-3 mb-0">Етап завершено. За планом уже розпочато етап ${after.seq}.
+        <button class="btn btn-sm btn-link p-0 align-baseline" onclick="openContractModal(${after.id})">Відкрити етап ${after.seq} →</button></div>`;
+    }
+    const next = cmNextPlannedStage(parent);
+    if (!next || next.id !== after.id) return '';
+    const canCloseParent = me.role === 'client' || freelancerCanClose(parent);
+    if (me.role !== 'client') {
+      return `<div class="alert alert-secondary mt-3 mb-0">Етап завершено невдало. Зачекайте — клієнт вирішить: продовжити план (етап ${next.seq}) чи закрити контракт.</div>`;
+    }
+    return `<div class="alert alert-info mt-3 mb-0">
+      <div class="mb-2">Етап завершено. За планом далі — етап ${next.seq} «${esc(next.title || '')}». Продовжити план чи закрити весь контракт?</div>
+      <div class="d-flex gap-2 flex-wrap">
+        <button class="btn btn-sm btn-primary" onclick="cmStartNextStageFromStage()">▶ Розпочати етап ${next.seq}</button>
+        ${canCloseParent ? `
+        <button class="btn btn-sm btn-outline-success" onclick="cmCloseParentFromStage('success')">Закрити контракт: виконано</button>
+        <button class="btn btn-sm btn-outline-danger" onclick="cmCloseParentFromStage('failure')">Закрити контракт: не виконано</button>` : ''}
+      </div>
+    </div>`;
+  }
+
   const last = stages[stages.length - 1];
   if (!last || last.id !== c.id) return '';
 
-  const me = _cmCtx.me;
   const canAddStage = me.role === 'client';
   const canCloseParent = me.role === 'client' || freelancerCanClose(parent);
   if (!canAddStage && !canCloseParent) {
@@ -386,6 +494,26 @@ async function cmAddStageFromStage() {
 async function cmCloseParentFromStage(outcome) {
   if (_cmOpen.parent_contract_id) await openContractModal(_cmOpen.parent_contract_id);
   cmClose(outcome);
+}
+
+// Planned contract: client starts the next stage of the plan by hand (after a
+// failed stage — after a successful one it starts by itself).
+async function cmStartNextStage() {
+  const next = cmNextPlannedStage(_cmOpen);
+  if (!next) return;
+  if (!confirm(`Розпочати етап ${next.seq} «${next.title || ''}» за планом? Після старту потрібно буде внести депозит за етап.`)) return;
+  try {
+    const res = await apiPost('/contracts.php', { action: 'start_next_stage', contract_id: _cmOpen.id });
+    await cmAfterMutation();
+    if (res.stage_id) await openContractModal(res.stage_id);
+  } catch (e) {
+    alert(e.message);
+  }
+}
+
+async function cmStartNextStageFromStage() {
+  if (_cmOpen.parent_contract_id) await openContractModal(_cmOpen.parent_contract_id);
+  cmStartNextStage();
 }
 
 // ─── СДАЧА-ПРИЁМКА РАБОТЫ (api/work_submissions.php) ───────────────────────
@@ -549,13 +677,48 @@ async function cmSubmitReview() {
   }
 }
 
-// ─── СМЕТА (bill of materials) — part of THIS contract/stage, not a separate ─
-// conversation-wide artifact. _cmEstimates holds only this row's own history.
+// ─── КОШТОРИС — part of THIS contract/stage (api/contract_estimates.php) ────
+// Two parts: «Роботи» (informative — affects nothing) and «Матеріали» (as
+// before). The FREELANCER composes it in a form (#estimateModal). The CLIENT
+// gets a generated .docx document + a short summary right in the contract
+// card — no HTML table. _cmEstimates holds only this row's history, newest first.
+const ESTIMATE_KINDS = ['work', 'material'];
+
+// Deposit gate — mirrors includes/estimate_document.php deposit_block_reason():
+// the latest estimate of the open contract/stage must exist, not be rejected,
+// and contain both «Роботи» and «Матеріали». null = deposit allowed.
+function estimateCoversBoth(items) {
+  const kinds = new Set((items || []).map(it => (it.kind || 'material')));
+  return kinds.has('work') && kinds.has('material');
+}
+function cmDepositBlockReason() {
+  const latest = _cmEstimates[0] || null;
+  if (!latest) return 'Депозит можна внести після того, як фрилансер складе кошторис (роботи й матеріали).';
+  if (latest.status === 'rejected') return 'Кошторис відхилено — депозит можна внести, коли фрилансер надішле новий.';
+  if (!estimateCoversBoth(latest.items)) return 'У кошторисі мають бути і роботи, і матеріали — попросіть фрилансера скласти його заново.';
+  return null;
+}
+
+function estimateDocLink(e, label) {
+  if (!e.document_path) return '<span class="text-muted small">Документ ще формується — оновіть сторінку трохи пізніше.</span>';
+  const fileName = `Кошторис_${(_cmOpen && (_cmOpen.number || _cmOpen.id)) || ''}_${e.id}.docx`;
+  return `<a class="btn btn-sm btn-outline-primary" href="${assetUrl(e.document_path)}" download="${esc(fileName)}" target="_blank" rel="noopener">📄 ${esc(label || 'Завантажити кошторис (.docx)')}</a>`;
+}
+
+// «Роботи ₴ … · Матеріали ₴ … · Разом ₴ …»
+function estimateSummaryHtml(e) {
+  return `<div class="small">
+    <span class="text-muted">Роботи:</span> ${esc(formatUAH(e.works_total))}
+    · <span class="text-muted">Матеріали:</span> ${esc(formatUAH(e.materials_total))}
+    · <b>Разом: ${esc(formatUAH(e.total))}</b>
+  </div>`;
+}
+
 function cmEstimateSection(c) {
   const me = _cmCtx.me;
   const latest = _cmEstimates[0] || null;
   const isFreelancer = me.role === 'freelancer';
-  const canCompose = isFreelancer && c.status === 'active' && (!latest || latest.status === 'rejected');
+  const canCompose = isFreelancer && (c.status === 'active' || cmIsPlannedStageOfActivePlan(c)) && (!latest || latest.status === 'rejected' || !estimateCoversBoth(latest.items));
 
   let inner;
   if (!latest) {
@@ -563,7 +726,8 @@ function cmEstimateSection(c) {
   } else {
     const labels = { submitted: isFreelancer ? 'на розгляді в замовника' : 'потребує рішення', accepted: '✓ затверджено', rejected: 'відхилено' };
     const classes = { submitted: 'text-warning', accepted: 'text-success', rejected: 'text-muted' };
-    const meta = `${latest.items.length} поз. · ${esc(formatUAH(latest.total))}`;
+    const status = `<span class="small ${classes[latest.status] || 'text-muted'}">${esc(labels[latest.status] || latest.status)}</span>`;
+
     let actions = '';
     if (latest.status === 'submitted' && !isFreelancer) {
       actions = `<div class="d-flex gap-2 mt-2">
@@ -571,8 +735,14 @@ function cmEstimateSection(c) {
         <button class="btn btn-sm btn-outline-danger" onclick="cmRespondEstimate(${latest.id}, false)">Відхилити</button>
       </div>`;
     }
-    inner = `<div class="small mb-1">${meta} · <span class="${classes[latest.status] || 'text-muted'}">${esc(labels[latest.status] || latest.status)}</span></div>
-      <button class="btn btn-sm btn-link p-0" onclick="cmOpenEstimate()">Відкрити кошторис</button>
+    inner = `
+      <div class="mb-1">${estimateSummaryHtml(latest)}</div>
+      <div class="small text-muted mb-2">Кошторис від ${esc(cmFmtDate(latest.created_at))} · ${status}</div>
+      <div class="d-flex gap-2 flex-wrap align-items-center">
+        ${estimateDocLink(latest)}
+        ${isFreelancer ? '<button class="btn btn-sm btn-link p-0" onclick="cmOpenEstimate()">Переглянути позиції</button>' : ''}
+      </div>
+      ${latest.note && !isFreelancer ? `<div class="small text-muted mt-1">«${esc(latest.note)}»</div>` : ''}
       ${actions}`;
   }
 
@@ -581,17 +751,19 @@ function cmEstimateSection(c) {
     : '';
 
   return `<div class="mt-3 pt-3 border-top">
-    <div class="fw-semibold small mb-2">📋 Кошторис на матеріали</div>
+    <div class="fw-semibold small mb-2">📋 Кошторис (роботи й матеріали)</div>
     ${inner}
     ${composeBtn}
   </div>`;
 }
 
+// The modal is the FREELANCER's tool: an editable form, or the read-only list
+// of what was sent (the client never needs it — they get the document).
 function cmOpenEstimate() {
   hideError('estimate-error');
   const latest = _cmEstimates[0] || null;
   const isFreelancer = _cmCtx.me.role === 'freelancer';
-  const editable = isFreelancer && _cmOpen.status === 'active' && (!latest || latest.status === 'rejected');
+  const editable = isFreelancer && (_cmOpen.status === 'active' || cmIsPlannedStageOfActivePlan(_cmOpen)) && (!latest || latest.status === 'rejected' || !estimateCoversBoth(latest.items));
 
   const editor = document.getElementById('estimate-editor');
   const readonly = document.getElementById('estimate-readonly');
@@ -600,8 +772,11 @@ function cmOpenEstimate() {
   if (editable) {
     editor.style.display = '';
     readonly.innerHTML = '';
-    document.getElementById('estimate-rows').innerHTML = '';
-    (latest && latest.items.length ? latest.items : [null, null]).forEach(addEstimateRow);
+    ESTIMATE_KINDS.forEach(kind => {
+      document.getElementById(`estimate-rows-${kind}`).innerHTML = '';
+      const prev = latest ? latest.items.filter(it => (it.kind || 'material') === kind) : [];
+      (prev.length ? prev : [null]).forEach(it => addEstimateRow(kind, it));
+    });
     document.getElementById('estimate-note').value = latest ? (latest.note || '') : '';
     recalcEstimate();
     footer.innerHTML = `
@@ -610,74 +785,83 @@ function cmOpenEstimate() {
   } else {
     editor.style.display = 'none';
     readonly.innerHTML = latest ? estimateReadonlyHtml(latest) : '<p class="text-muted">Кошторис не складено.</p>';
-    const canDecide = !isFreelancer && latest && latest.status === 'submitted';
-    footer.innerHTML = canDecide
-      ? `<button class="btn btn-outline-danger me-auto" onclick="cmRespondEstimate(${latest.id}, false)">Відхилити</button>
-         <button class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>
-         <button class="btn btn-success" onclick="cmRespondEstimate(${latest.id}, true)">Затвердити</button>`
-      : `<button class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>`;
+    footer.innerHTML = `<button class="btn btn-secondary" data-bs-dismiss="modal">Закрити</button>`;
   }
 
   cmOpenChild('estimateModal');
 }
 
-function estimateRowHtml(it) {
+function estimateRowHtml(kind, it) {
   it = it || { name: '', qty: '', unit: '', unit_price: '' };
+  const ph = document.getElementById(`estimate-rows-${kind}`)?.dataset.placeholder || '';
   return `
     <tr>
-      <td><input class="form-control form-control-sm est-name" value="${esc(it.name)}"></td>
+      <td><input class="form-control form-control-sm est-name" maxlength="255" value="${esc(it.name)}" placeholder="${esc(ph)}"></td>
       <td><input type="number" min="0" step="any" class="form-control form-control-sm est-qty" value="${esc(it.qty)}" oninput="recalcEstimate()"></td>
-      <td><input class="form-control form-control-sm est-unit" value="${esc(it.unit)}" placeholder="шт"></td>
+      <td><input class="form-control form-control-sm est-unit" maxlength="20" value="${esc(it.unit || '')}" placeholder="${kind === 'work' ? 'м²' : 'шт'}"></td>
       <td><input type="number" min="0" step="any" class="form-control form-control-sm est-price" value="${esc(it.unit_price)}" oninput="recalcEstimate()"></td>
-      <td><button class="btn-close" title="Прибрати" onclick="this.closest('tr').remove(); recalcEstimate()"></button></td>
+      <td><button type="button" class="btn-close" title="Прибрати" onclick="this.closest('tr').remove(); recalcEstimate()"></button></td>
     </tr>`;
 }
 
-function addEstimateRow(it) {
-  document.getElementById('estimate-rows').insertAdjacentHTML('beforeend', estimateRowHtml(it));
+function addEstimateRow(kind, it) {
+  document.getElementById(`estimate-rows-${kind || 'material'}`).insertAdjacentHTML('beforeend', estimateRowHtml(kind || 'material', it));
 }
 
 function recalcEstimate() {
   let total = 0;
-  document.querySelectorAll('#estimate-rows tr').forEach(tr => {
-    const qty = Number(tr.querySelector('.est-qty').value) || 0;
-    const price = Number(tr.querySelector('.est-price').value) || 0;
-    total += qty * price;
+  ESTIMATE_KINDS.forEach(kind => {
+    let sub = 0;
+    document.querySelectorAll(`#estimate-rows-${kind} tr`).forEach(tr => {
+      sub += (Number(tr.querySelector('.est-qty').value) || 0) * (Number(tr.querySelector('.est-price').value) || 0);
+    });
+    document.getElementById(`estimate-subtotal-${kind}`).textContent = formatUAH(sub);
+    total += sub;
   });
   document.getElementById('estimate-editor-total').textContent = 'Разом: ' + formatUAH(total);
 }
 
+// Freelancer's read-only view of what was sent, split into the two parts.
 function estimateReadonlyHtml(e) {
-  const rows = e.items.map(it => `
-    <tr>
-      <td>${esc(it.name)}</td>
-      <td class="text-end">${esc(it.qty)}</td>
-      <td>${esc(it.unit || '')}</td>
-      <td class="text-end">${esc(formatUAH(it.unit_price))}</td>
-      <td class="text-end">${esc(formatUAH(it.qty * it.unit_price))}</td>
-    </tr>`).join('');
+  const part = (kind, title) => {
+    const items = e.items.filter(it => (it.kind || 'material') === kind);
+    const rows = items.map(it => `
+      <tr>
+        <td>${esc(it.name)}</td>
+        <td class="text-end">${esc(it.qty)}</td>
+        <td>${esc(it.unit || '')}</td>
+        <td class="text-end">${esc(formatUAH(it.unit_price))}</td>
+        <td class="text-end">${esc(formatUAH(it.qty * it.unit_price))}</td>
+      </tr>`).join('') || '<tr><td colspan="5" class="text-muted">—</td></tr>';
+    return `<h6 class="fw-semibold mt-2">${title}</h6>
+      <div class="table-responsive">
+        <table class="table table-sm mb-2">
+          <thead><tr><th>Найменування</th><th class="text-end">К-сть</th><th>Од.</th><th class="text-end">Ціна/од</th><th class="text-end">Сума</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>`;
+  };
   return `
-    <div class="table-responsive">
-      <table class="table table-sm">
-        <thead><tr><th>Матеріал / робота</th><th class="text-end">К-сть</th><th>Од.</th><th class="text-end">Ціна/од</th><th class="text-end">Сума</th></tr></thead>
-        <tbody>${rows}</tbody>
-        <tfoot><tr><th colspan="4" class="text-end">Разом</th><th class="text-end">${esc(formatUAH(e.total))}</th></tr></tfoot>
-      </table>
-    </div>
-    ${e.note ? `<p class="text-muted small mb-0">${esc(e.note)}</p>` : ''}`;
+    ${part('work', '🛠 Роботи')}
+    ${part('material', '🧱 Матеріали')}
+    <div class="mb-2">${estimateSummaryHtml(e)}</div>
+    ${e.note ? `<p class="text-muted small">${esc(e.note)}</p>` : ''}
+    <div>${estimateDocLink(e, 'Документ, який отримав замовник (.docx)')}</div>`;
 }
 
 async function cmSubmitEstimate() {
   hideError('estimate-error');
   const items = [];
-  document.querySelectorAll('#estimate-rows tr').forEach(tr => {
-    const name = tr.querySelector('.est-name').value.trim();
-    const qty = Number(tr.querySelector('.est-qty').value) || 0;
-    const unit = tr.querySelector('.est-unit').value.trim();
-    const unit_price = Number(tr.querySelector('.est-price').value) || 0;
-    if (name && qty > 0) items.push({ name, qty, unit, unit_price });
+  ESTIMATE_KINDS.forEach(kind => {
+    document.querySelectorAll(`#estimate-rows-${kind} tr`).forEach(tr => {
+      const name = tr.querySelector('.est-name').value.trim();
+      const qty = Number(tr.querySelector('.est-qty').value) || 0;
+      const unit = tr.querySelector('.est-unit').value.trim();
+      const unit_price = Number(tr.querySelector('.est-price').value) || 0;
+      if (name && qty > 0) items.push({ kind, name, qty, unit, unit_price });
+    });
   });
-  if (!items.length) return showError('estimate-error', 'Додайте хоча б одну позицію');
+  if (!estimateCoversBoth(items)) return showError('estimate-error', 'Кошторис має містити і роботи, і матеріали — додайте хоча б по одній позиції в кожен розділ');
 
   try {
     await apiPost('/contract_estimates.php', {
@@ -744,9 +928,14 @@ function cmRenderMenu(c) {
   const stagedParent = cmIsStagedParent(c);
 
   if (!stagedParent && c.status === 'proposed' && me.role === 'freelancer') {
-    const noun = c.parent_contract_id ? 'етап' : 'контракт';
+    const noun = cmIsPlanApproval(c) ? 'план (усі етапи)' : (c.parent_contract_id ? 'етап' : 'контракт');
     items.push(`<li><button class="dropdown-item" onclick="cmAccept()">Підтвердити ${noun}</button></li>`);
     items.push(`<li><button class="dropdown-item text-danger" onclick="cmReject()">Відхилити ${noun}</button></li>`);
+  }
+
+  // A stage «За планом» of an accepted plan: terms can still be adjusted before it starts.
+  if (cmIsPlannedStageOfActivePlan(c) && !_cmChange) {
+    items.push(`<li><button class="dropdown-item" onclick="cmOpenChange()">Змінити умови етапу (ціна / термін)</button></li>`);
   }
 
   if (c.status === 'active') {
@@ -781,8 +970,10 @@ function cmAccept() {
 }
 
 function cmReject() {
-  const noun = _cmOpen.parent_contract_id ? 'етап' : 'контракт';
-  if (!confirm(`Відхилити ${noun}?`)) return;
+  const q = cmIsPlanApproval(_cmOpen)
+    ? 'Відхилити весь план? Поетапний контракт буде відхилено цілком.'
+    : `Відхилити ${_cmOpen.parent_contract_id ? 'етап' : 'контракт'}?`;
+  if (!confirm(q)) return;
   cmPost('/contracts.php', { action: 'reject', contract_id: _cmOpen.id });
 }
 

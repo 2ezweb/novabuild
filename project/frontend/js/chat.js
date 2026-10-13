@@ -39,6 +39,9 @@ window.addEventListener('DOMContentLoaded', async () => {
     showChatLink: false,          // already in the conversation
   });
 
+  // «Звернутися до підтримки» — the admin sees which conversation it came from.
+  SupportWidget.init({ me: currentUser, conversationId });
+
   document.getElementById('message-input').focus();
 
   try {
@@ -205,21 +208,43 @@ const MINI_STATUS = {
   rejected:  'Відхилено',
 };
 
+// The same client and freelancer can run several contracts in parallel, so the
+// sidebar splits them: everything still in play (proposed + active) on top,
+// proposals waiting on the freelancer first; finished ones folded underneath.
+let doneContractsOpen = false;   // remembers the fold across the 10-second refresh
+
 function renderContractCards() {
   const el = document.getElementById('contract-cards');
-  el.innerHTML = contracts.length
-    ? contracts.map(contractChatCard).join('')
-    : '<p class="text-muted small mb-0">Контрактів поки немає.</p>';
+  if (!contracts.length) {
+    el.innerHTML = '<p class="text-muted small mb-0">Контрактів поки немає.</p>';
+    return;
+  }
+  const open = contracts
+    .filter(c => c.status === 'proposed' || c.status === 'active')
+    .sort((a, b) => (a.status === 'proposed' ? 0 : 1) - (b.status === 'proposed' ? 0 : 1) || b.id - a.id);
+  const done = contracts.filter(c => c.status !== 'proposed' && c.status !== 'active');
+
+  let html = `<div class="text-muted small fw-semibold mb-1">В роботі (${open.length})</div>`;
+  html += open.length
+    ? open.map(contractChatCard).join('')
+    : '<p class="text-muted small">Активних контрактів немає.</p>';
+  if (done.length) {
+    html += `<details class="mt-2" ${doneContractsOpen ? 'open' : ''} ontoggle="doneContractsOpen = this.open">
+      <summary class="text-muted small fw-semibold mb-1">Завершені (${done.length})</summary>
+      ${done.map(contractChatCard).join('')}
+    </details>`;
+  }
+  el.innerHTML = html;
 }
 
 function contractChatCard(c) {
   const badge  = `<span class="badge ${CONTRACT_STATUS_BADGE[c.status] || 'bg-secondary'} flex-shrink-0">${esc(MINI_STATUS[c.status] || c.status)}</span>`;
   const staged = c.type === 'staged';
-  const title  = staged
-    ? `📄 Поетапний #${esc(c.number || c.id)}`
-    : `📄 Контракт #${esc(c.number || c.id)}`;
+  const name   = contractName(c);
+  const title  = (staged ? `📄 Поетапний #${esc(c.number || c.id)}` : `📄 Контракт #${esc(c.number || c.id)}`)
+    + (name ? `<div class="text-truncate" title="${esc(name)}">${esc(name)}</div>` : '');
   const sub = staged
-    ? `${(c.stages || []).length} ет. · ${esc(formatUAH(c.price))}`
+    ? `${c.stage_mode === 'planned' ? 'план · ' : ''}${(c.stages || []).length} ет. · ${esc(formatUAH(c.price))}`
     : `${esc(formatUAH(c.price))}${c.deadline ? ' · до ' + esc(c.deadline) : ''}`;
   const escrow = c.status === 'active' && Number(c.escrowed_amount) >= 0 && !staged
     ? `<div class="text-muted mt-1" style="font-size:.8rem">ескроу: ${esc(formatUAH(c.escrowed_amount))} / ${esc(formatUAH(c.price))}</div>`
@@ -249,10 +274,17 @@ function contractChatHint(c) {
   if (c.status === 'active' && c.type !== 'staged') {
     if (currentUser.role === 'client') {
       const remaining = Math.max(0, Number(c.price) - Number(c.escrowed_amount || 0));
+      if (remaining > 0 && !c.deposit_ready) {
+        // Deposit opens only after the estimate (роботи + матеріали) — escrow.php.
+        return '<div class="text-muted mt-1" style="font-size:.8rem">📋 чекає на кошторис — потім депозит</div>';
+      }
       if (remaining > 0) {
         return `<div class="text-primary mt-1" style="font-size:.8rem">💳 до сплати: ${esc(formatUAH(remaining))}</div>`;
       }
     } else {
+      if (!c.deposit_ready && Number(c.escrowed_amount || 0) <= 0) {
+        return '<div class="text-primary mt-1" style="font-size:.8rem">📋 складіть кошторис — без нього клієнт не внесе депозит</div>';
+      }
       // Freelancer: whether the client actually paid the reserve, at a glance —
       // no reason to start work before the deposit is in (see contract-actions.js paymentBadgeHtml).
       const badge = paymentBadgeHtml(c);
@@ -265,8 +297,8 @@ function contractChatHint(c) {
 function renderProposeButton() {
   const btn = document.getElementById('propose-contract-btn');
   if (!btn) return;
-  const hasOpen = contracts.some(c => c.status === 'proposed' || c.status === 'active');
-  btn.style.display = (currentUser.role === 'client' && !hasOpen) ? '' : 'none';
+  // Parallel contracts are allowed — the client can always propose another one.
+  btn.style.display = currentUser.role === 'client' ? '' : 'none';
 }
 
 // ─── PROPOSE A CONTRACT (chat-only entry point) ─────────────────────────────
@@ -276,8 +308,12 @@ async function loadClientOffers() {
   if (currentUser.role !== 'client') return;
   try {
     const offers = await apiFetch('/offers.php');
-    // "Открытый" = still open AND not already matched with someone on another contract.
-    clientOpenOffers = offers.filter(o => o.status === 'open' && !o.is_outdated);
+    // "Открытый" = still open AND not already matched with someone on another contract,
+    // AND not already the subject of an open contract right here (API refuses that duplicate).
+    const busyOfferIds = new Set(contracts
+      .filter(c => c.offer_id && (c.status === 'proposed' || c.status === 'active'))
+      .map(c => Number(c.offer_id)));
+    clientOpenOffers = offers.filter(o => o.status === 'open' && !o.is_outdated && !busyOfferIds.has(Number(o.id)));
   } catch {
     clientOpenOffers = [];
   }
@@ -291,11 +327,19 @@ function renderProposeOfferOptions() {
 
 // Pull price + deadline from the selected offer into the form. The user can
 // still edit either field afterwards — this is just a shortcut, not a lock.
+// The contract name is filled from the offer title too — but only while the
+// user hasn't typed their own (tracked via the last value we put there).
+let proposeAutoTitle = '';
+
 function applyOfferToProposeForm(offerId) {
   const o = clientOpenOffers.find(x => x.id === offerId);
   if (!o) return;
   if (o.budget) document.getElementById('propose-price').value = o.budget;
   document.getElementById('propose-deadline').value = o.deadline || '';
+  const titleInput = document.getElementById('propose-title');
+  if (!titleInput.value.trim() || titleInput.value === proposeAutoTitle) {
+    titleInput.value = proposeAutoTitle = o.title || '';
+  }
 }
 
 function onProposeOfferChange() {
@@ -305,10 +349,14 @@ function onProposeOfferChange() {
 
 async function openProposeModal() {
   hideError('propose-error');
+  document.getElementById('propose-title').value = '';
+  proposeAutoTitle = '';
   document.getElementById('propose-price').value = '';
   document.getElementById('propose-deadline').value = '';
   document.getElementById('propose-stage-title').value = '';
   document.getElementById('propose-type-full').checked = true;
+  document.getElementById('propose-mode-incremental').checked = true;
+  document.getElementById('propose-plan-rows').innerHTML = '';
   onProposeTypeChange();
 
   await loadClientOffers();
@@ -331,8 +379,67 @@ function proposeType() {
   return document.querySelector('input[name="propose-type"]:checked')?.value || 'full';
 }
 
+// Staged only: 'incremental' (stage 1 now, the rest as you go) or 'planned'
+// (the whole plan of stages up front — see api/contracts.php propose).
+function proposeMode() {
+  if (proposeType() !== 'staged') return null;
+  return document.querySelector('input[name="propose-mode"]:checked')?.value || 'incremental';
+}
+
+function onProposeModeChange() {
+  const planned = proposeMode() === 'planned';
+  document.getElementById('propose-single-wrap').style.display = planned ? 'none' : '';
+  document.getElementById('propose-plan-wrap').style.display = planned ? '' : 'none';
+  // Start the plan with two empty stages; carry over what was typed for stage 1.
+  if (planned && !document.querySelectorAll('#propose-plan-rows tr').length) {
+    addPlanRow({ title: val('propose-stage-title'), price: val('propose-price'), deadline: val('propose-deadline') });
+    addPlanRow();
+  }
+}
+
+function planRowHtml(s) {
+  s = s || { title: '', price: '', deadline: '' };
+  return `
+    <tr>
+      <td class="text-muted small plan-num"></td>
+      <td><input class="form-control form-control-sm plan-title" maxlength="255" value="${esc(s.title || '')}" placeholder="Демонтаж, чорнові роботи..."></td>
+      <td><input type="number" min="1" class="form-control form-control-sm plan-price" value="${esc(s.price || '')}" oninput="recalcPlan()"></td>
+      <td><input type="date" class="form-control form-control-sm plan-deadline" value="${esc(s.deadline || '')}"></td>
+      <td><button type="button" class="btn-close" title="Прибрати етап" onclick="this.closest('tr').remove(); recalcPlan()"></button></td>
+    </tr>`;
+}
+
+function addPlanRow(s) {
+  document.getElementById('propose-plan-rows').insertAdjacentHTML('beforeend', planRowHtml(s));
+  recalcPlan();
+}
+
+function recalcPlan() {
+  let total = 0;
+  document.querySelectorAll('#propose-plan-rows tr').forEach((tr, i) => {
+    tr.querySelector('.plan-num').textContent = i + 1;
+    total += Number(tr.querySelector('.plan-price').value) || 0;
+  });
+  document.getElementById('propose-plan-total').textContent = 'Разом: ' + formatUAH(total);
+}
+
+function readPlan() {
+  return Array.from(document.querySelectorAll('#propose-plan-rows tr')).map(tr => ({
+    title: tr.querySelector('.plan-title').value.trim(),
+    price: Number(tr.querySelector('.plan-price').value) || 0,
+    deadline: tr.querySelector('.plan-deadline').value || null,
+  }));
+}
+
 function onProposeTypeChange() {
   const staged = proposeType() === 'staged';
+  document.getElementById('propose-mode-wrap').style.display = staged ? '' : 'none';
+  if (!staged) {
+    document.getElementById('propose-single-wrap').style.display = '';
+    document.getElementById('propose-plan-wrap').style.display = 'none';
+  } else {
+    onProposeModeChange();
+  }
   document.getElementById('propose-stage-title-wrap').style.display = staged ? '' : 'none';
   document.getElementById('propose-price-label').textContent    = staged ? 'Ціна першого етапу, ₴' : 'Ціна, ₴';
   document.getElementById('propose-deadline-label').innerHTML   = staged
@@ -351,8 +458,17 @@ async function submitPropose() {
   const stageTitle = val('propose-stage-title');
   const offerId = Number(document.getElementById('propose-offer-select').value) || null;
 
-  if (!price || price <= 0) return showError('propose-error', 'Вкажіть ціну');
-  if (type === 'staged' && !stageTitle) return showError('propose-error', 'Вкажіть назву першого етапу');
+  const mode = proposeMode();
+  let plan = null;
+  if (mode === 'planned') {
+    plan = readPlan();
+    if (plan.length < 2) return showError('propose-error', 'У плані має бути щонайменше 2 етапи');
+    const badIdx = plan.findIndex(s => !s.title || s.price <= 0);
+    if (badIdx >= 0) return showError('propose-error', `Етап ${badIdx + 1}: вкажіть назву та ціну`);
+  } else {
+    if (!price || price <= 0) return showError('propose-error', 'Вкажіть ціну');
+    if (type === 'staged' && !stageTitle) return showError('propose-error', 'Вкажіть назву першого етапу');
+  }
 
   const payload = {
     action: 'propose',
@@ -361,8 +477,13 @@ async function submitPropose() {
     price,
     deadline: deadline || null,
     offer_id: offerId,
+    title: val('propose-title'),
   };
-  if (type === 'staged') payload.stage_title = stageTitle;
+  if (type === 'staged') {
+    payload.stage_mode = mode;
+    if (plan) payload.stages = plan;
+    else payload.stage_title = stageTitle;
+  }
 
   try {
     await apiPost('/contracts.php', payload);

@@ -12,6 +12,7 @@ require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/contract_number.php';
 require_once __DIR__ . '/../includes/contract_payouts.php';
 require_once __DIR__ . '/../includes/uploads.php';
+require_once __DIR__ . '/../includes/staged.php';
 
 // Сдача-приёмка работы по полному контракту или этапу (не по поэтапному
 // контракту целиком — там сдаётся каждый этап).
@@ -195,6 +196,9 @@ if ($action === 'decide') {
         $accept
             ? 'Клієнт прийняв роботу щодо ' . contract_label($contract) . ' — оплату переведено на баланс'
             : 'Клієнт повернув роботу щодо ' . contract_label($contract) . ' на доопрацювання');
+
+    // A stage of a planned contract accepted → the next stage of the plan starts.
+    if ($accept) after_stage_completed($db, $contract);
 
     echo json_encode(['success' => true]);
     exit;

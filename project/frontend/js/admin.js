@@ -15,9 +15,14 @@ window.addEventListener('DOMContentLoaded', async () => {
   loadWithdrawals();
   loadDisputes();
   loadEscalations();
+  loadUrgent();
+  // Emergency requests must surface without a page reload.
+  setInterval(loadUrgent, URGENT_LIST_POLL_MS);
 });
 
 function showSection(section) {
+  document.getElementById('admin-section-urgent').style.display = section === 'urgent' ? '' : 'none';
+  document.getElementById('nav-urgent-btn').classList.toggle('active', section === 'urgent');
   document.getElementById('admin-section-users').style.display = section === 'users' ? '' : 'none';
   document.getElementById('admin-section-requests').style.display = section === 'requests' ? '' : 'none';
   document.getElementById('admin-section-withdrawals').style.display = section === 'withdrawals' ? '' : 'none';
@@ -283,7 +288,7 @@ function escalationCard(e) {
     <div class="card mb-3 p-3">
       <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>
-          <h6 class="fw-semibold mb-1">${esc(noun)} #${esc(e.contract_number)} — ${esc(formatUAH(e.price))}</h6>
+          <h6 class="fw-semibold mb-1">${esc(noun)} #${esc(e.contract_number)}${e.contract_title ? ' «' + esc(e.contract_title) + '»' : ''} — ${esc(formatUAH(e.price))}</h6>
           <p class="text-muted small mb-0">Клієнт: ${esc(clientName)} · Фрилансер: ${esc(freelancerName)}</p>
           <p class="text-muted small mb-0">Звернувся ${timeAgo(e.created_at)}: «${esc(truncateText(e.reason || '', 140))}»</p>
         </div>
@@ -337,6 +342,8 @@ function renderEscalationDetail() {
   const what = contract.parent_contract_id
     ? `етап #${esc(contract.number)} контракту #${esc(contract.parent_number)}`
     : `контракт #${esc(contract.number)}`;
+  const contractTitle = [contract.title, contract.offer_title]
+    .find(t => t && !['Поетапний контракт', 'Поэтапный контракт'].includes(t)) || '';
 
   const messagesHtml = messages.length
     ? messages.map(m => `
@@ -362,10 +369,11 @@ function renderEscalationDetail() {
   const estimateHtml = latestEstimate ? `
     <div class="table-responsive">
       <table class="table table-sm mb-1">
-        <thead><tr><th>Матеріал / робота</th><th class="text-end">К-сть</th><th>Од.</th><th class="text-end">Ціна/од</th><th class="text-end">Сума</th></tr></thead>
+        <thead><tr><th>Розділ</th><th>Найменування</th><th class="text-end">К-сть</th><th>Од.</th><th class="text-end">Ціна/од</th><th class="text-end">Сума</th></tr></thead>
         <tbody>
           ${latestEstimate.items.map(it => `
             <tr>
+              <td class="text-muted">${it.kind === 'work' ? 'Роботи' : 'Матеріали'}</td>
               <td>${esc(it.name)}</td>
               <td class="text-end">${esc(it.qty)}</td>
               <td>${esc(it.unit || '')}</td>
@@ -373,9 +381,11 @@ function renderEscalationDetail() {
               <td class="text-end">${esc(formatUAH(it.qty * it.unit_price))}</td>
             </tr>`).join('')}
         </tbody>
-        <tfoot><tr><th colspan="4" class="text-end">Разом</th><th class="text-end">${esc(formatUAH(latestEstimate.total))}</th></tr></tfoot>
+        <tfoot><tr><th colspan="5" class="text-end">Разом</th><th class="text-end">${esc(formatUAH(latestEstimate.total))}</th></tr></tfoot>
       </table>
     </div>
+    <div class="small">Роботи: ${esc(formatUAH(latestEstimate.works_total))} · Матеріали: ${esc(formatUAH(latestEstimate.materials_total))}</div>
+    ${latestEstimate.document_path ? `<div class="small"><a href="${assetUrl(latestEstimate.document_path)}" target="_blank" rel="noopener">📄 Документ, який отримав замовник (.docx)</a></div>` : ''}
     <div class="small text-muted">Статус: ${esc(ESCALATION_ESTIMATE_STATUS[latestEstimate.status] || latestEstimate.status)}</div>
     ${latestEstimate.note ? `<div class="small text-muted">«${esc(latestEstimate.note)}»</div>` : ''}
   ` : '<p class="text-muted small mb-0">Кошторис не складено.</p>';
@@ -392,6 +402,7 @@ function renderEscalationDetail() {
         <h6 class="fw-semibold mb-1">Контракт</h6>
         <dl class="row small mb-0">
           <dt class="col-5 text-muted fw-normal">Тип</dt><dd class="col-7">${esc(what)}</dd>
+          ${contractTitle ? `<dt class="col-5 text-muted fw-normal">Назва</dt><dd class="col-7">${esc(contractTitle)}</dd>` : ''}
           <dt class="col-5 text-muted fw-normal">Ціна</dt><dd class="col-7 fw-semibold">${esc(formatUAH(contract.price))}</dd>
           <dt class="col-5 text-muted fw-normal">Термін</dt><dd class="col-7">${contract.deadline ? esc(contract.deadline) : '—'}</dd>
           <dt class="col-5 text-muted fw-normal">В ескроу</dt><dd class="col-7">${esc(formatUAH(contract.escrowed_amount))}</dd>
@@ -415,7 +426,7 @@ function renderEscalationDetail() {
     </div>
 
     <div class="mb-4">
-      <h6 class="fw-semibold mb-2">Кошторис на матеріали</h6>
+      <h6 class="fw-semibold mb-2">Кошторис (роботи й матеріали)</h6>
       ${estimateHtml}
     </div>
 
@@ -501,5 +512,199 @@ async function viewDocument(userId) {
       : `<img src="${url}" style="max-width:100%;max-height:70vh">`;
   } catch (e) {
     viewer.innerHTML = `<div class="alert alert-warning">${esc(e.message)}</div>`;
+  }
+}
+
+// ─── 🚨 ЕКСТРЕНІ ЗАЯВКИ («Виклик адміністратора», api/support.php) ──────────
+// Raised from the user's chat (support-widget.js). Every admin is notified
+// «ТЕРМІНОВА ЗАЯВКА №…»; any admin can join and answer. The chat lives 3 days.
+// The list refreshes every 15 s on its own; an open chat polls every 4 s.
+const URGENT_LIST_POLL_MS = 15000;
+const URGENT_CHAT_POLL_MS = 4000;
+const PAGE_TITLE = document.title;
+
+let urgentTickets = [];
+let urgentOpen = null;       // ticket view currently shown in #urgentModal
+let urgentLastId = 0;
+let urgentTimer = null;
+
+async function loadUrgent() {
+  const list = document.getElementById('admin-urgent-list');
+  try {
+    urgentTickets = await apiFetch('/support.php?action=list');
+  } catch (e) {
+    list.innerHTML = `<div class="alert alert-warning">${esc(e.message)}</div>`;
+    return;
+  }
+  const badge = document.getElementById('urgent-count');
+  badge.textContent = urgentTickets.length;
+  badge.style.display = urgentTickets.length ? '' : 'none';
+  document.title = urgentTickets.length ? `(${urgentTickets.length}) 🚨 ${PAGE_TITLE}` : PAGE_TITLE;
+
+  list.innerHTML = urgentTickets.length
+    ? urgentTickets.map(urgentCard).join('')
+    : emptyState('Екстрених заявок немає.');
+}
+
+function urgentAdminsText(t) {
+  return t.admins.length ? 'У чаті: ' + t.admins.map(a => a.name).join(', ') : 'Ще ніхто не підключився';
+}
+
+function fmtDayTime(s) {
+  const d = new Date(String(s).replace(' ', 'T'));
+  return isNaN(d) ? s : d.toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+function urgentCard(t) {
+  const roleLabel = { client: 'клієнт', freelancer: 'фрилансер' }[t.user.role] || t.user.role;
+  return `
+    <div class="card mb-3 p-3 ${t.admins.length ? '' : 'border-danger'}">
+      <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <div>
+          <h6 class="fw-bold mb-1 text-danger">ТЕРМІНОВА ЗАЯВКА №${esc(t.number)}</h6>
+          <p class="small mb-0">${esc(t.user.name)} <span class="text-muted">(${esc(roleLabel)}, ${esc(t.user.email)})</span></p>
+          <p class="text-muted small mb-0">Створено ${esc(timeAgo(t.created_at))} · повідомлень: ${t.message_count} · діє до ${esc(fmtDayTime(t.expires_at))}</p>
+          <p class="small mb-0 ${t.admins.length ? 'text-success' : 'text-danger fw-semibold'}">${esc(urgentAdminsText(t))}</p>
+        </div>
+        <button class="btn btn-sm ${t.joined_by_me ? 'btn-outline-danger' : 'btn-danger'}" onclick="openUrgent(${t.id})">${t.joined_by_me ? 'Відкрити чат' : 'Підключитися'}</button>
+      </div>
+    </div>`;
+}
+
+async function openUrgent(id) {
+  hideError('urgent-error');
+  let res;
+  try {
+    res = await apiFetch(`/support.php?action=detail&ticket_id=${id}`);
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
+  // «Підключитися» = join right away (the user sees «Адміністратор … підключився»).
+  if (!res.ticket.joined_by_me && res.ticket.status === 'open') {
+    try {
+      await apiPost('/support.php', { action: 'join', ticket_id: id });
+      res = await apiFetch(`/support.php?action=detail&ticket_id=${id}`);
+    } catch (e) { alert(e.message); }
+  }
+  urgentOpen = res.ticket;
+  urgentLastId = 0;
+  document.getElementById('urgent-messages').innerHTML = '';
+  renderUrgentHeader();
+  appendUrgentMessages(res.messages);
+  renderUrgentContext(res.ticket, res.context);
+
+  const modalEl = document.getElementById('urgentModal');
+  modalEl.addEventListener('hidden.bs.modal', stopUrgentPolling, { once: true });
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+  stopUrgentPolling();
+  urgentTimer = setInterval(pollUrgent, URGENT_CHAT_POLL_MS);
+  loadUrgent();
+}
+
+function renderUrgentHeader() {
+  const t = urgentOpen;
+  const open = t.status === 'open';
+  document.getElementById('urgent-title').textContent = `🚨 Екстрена заявка №${t.number}`;
+  document.getElementById('urgent-status').innerHTML = open
+    ? `<div class="support-status ${t.admins.length ? 'bg-success-subtle' : 'bg-warning-subtle'}">${esc(urgentAdminsText(t))} · діє до ${esc(fmtDayTime(t.expires_at))}</div>`
+    : `<div class="support-status bg-secondary-subtle">${t.status === 'expired' ? '⌛ Термін дії заявки минув.' : '✔️ Заявку завершено.'}</div>`;
+  document.getElementById('urgent-input').style.display = open ? '' : 'none';
+  document.getElementById('urgent-footer').innerHTML = `
+    ${open ? '<button class="btn btn-outline-danger me-auto" onclick="closeUrgent()">✔️ Завершити заявку</button>' : ''}
+    <button class="btn btn-secondary" data-bs-dismiss="modal">Закрити вікно</button>`;
+}
+
+function urgentMessageHtml(m) {
+  if (m.sender_role === 'system') return `<div class="support-msg system">${esc(m.body)}</div>`;
+  const mine = m.sender_id === currentUser.id;
+  const who = m.sender_role === 'admin' ? `🛡 ${esc(m.sender_name || 'Адміністратор')}` : `👤 ${esc(m.sender_name || 'Користувач')}`;
+  return `<div class="support-msg ${mine ? 'mine' : 'theirs'}">
+    ${mine ? '' : `<div class="support-msg-author">${who}</div>`}
+    <div>${esc(m.body)}</div>
+    <span class="support-msg-time">${esc(timeAgo(m.created_at))}</span>
+  </div>`;
+}
+
+function appendUrgentMessages(list) {
+  const fresh = list.filter(m => m.id > urgentLastId);
+  if (!fresh.length) return;
+  const box = document.getElementById('urgent-messages');
+  box.insertAdjacentHTML('beforeend', fresh.map(urgentMessageHtml).join(''));
+  urgentLastId = Math.max(urgentLastId, ...fresh.map(m => m.id));
+  box.scrollTop = box.scrollHeight;
+}
+
+// Right column: who raised it, and the conversation it was raised from.
+function renderUrgentContext(t, context) {
+  const u = t.user;
+  const roleLabel = u ? ({ client: 'Клієнт', freelancer: 'Фрилансер' }[u.role] || u.role) : '';
+  let html = `
+    <h6 class="fw-semibold mb-1">Хто звернувся</h6>
+    <p class="small mb-3">${u ? `${esc(u.name)} · ${esc(roleLabel)}<br><span class="text-muted">${esc(u.email)}</span>${u.status === 'banned' ? ' <span class="badge bg-danger">заблоковано</span>' : ''}` : '—'}</p>`;
+  if (context) {
+    const otherRole = context.other ? ({ client: 'клієнт', freelancer: 'фрилансер' }[context.other.role] || context.other.role) : '';
+    html += `
+      <h6 class="fw-semibold mb-1">Звідки звернулися</h6>
+      <p class="small mb-1">Переписка з: ${context.other ? `${esc(context.other.name)} <span class="text-muted">(${esc(otherRole)}, ${esc(context.other.email)})</span>` : '—'}</p>
+      <div class="small text-muted mb-1">Останні повідомлення переписки:</div>
+      <div class="border rounded p-2 small" style="max-height:300px; overflow-y:auto">
+        ${context.messages.length ? context.messages.map(m => `
+          <div class="mb-2">
+            <div class="fw-semibold">${esc(m.sender_name)} <span class="text-muted fw-normal">· ${esc(timeAgo(m.created_at))}</span></div>
+            ${m.body ? `<div style="white-space:pre-wrap">${esc(m.body)}</div>` : '<div class="text-muted">📎 Файл</div>'}
+          </div>`).join('') : '<p class="text-muted mb-0">Повідомлень немає.</p>'}
+      </div>`;
+  } else {
+    html += `<p class="small text-muted">Звернення без прив'язки до переписки.</p>`;
+  }
+  document.getElementById('urgent-context').innerHTML = html;
+}
+
+async function pollUrgent() {
+  if (!urgentOpen) return;
+  try {
+    const res = await apiFetch(`/support.php?action=messages&ticket_id=${urgentOpen.id}&after_id=${urgentLastId}`);
+    const changed = res.ticket.status !== urgentOpen.status || res.ticket.admins.length !== urgentOpen.admins.length;
+    urgentOpen = Object.assign(urgentOpen, res.ticket);
+    if (changed) renderUrgentHeader();
+    appendUrgentMessages(res.messages);
+    if (res.ticket.status !== 'open') stopUrgentPolling();
+  } catch { /* next tick */ }
+}
+
+function stopUrgentPolling() {
+  if (urgentTimer) { clearInterval(urgentTimer); urgentTimer = null; }
+}
+
+async function sendUrgentMessage(event) {
+  event.preventDefault();
+  const input = document.getElementById('urgent-text');
+  const text = input.value.trim();
+  if (!text || !urgentOpen) return;
+  const btn = document.getElementById('urgent-send');
+  btn.disabled = true;
+  try {
+    const res = await apiPost('/support.php', { action: 'send', ticket_id: urgentOpen.id, body: text, after_id: urgentLastId });
+    input.value = '';
+    appendUrgentMessages(res.messages);
+  } catch (e) {
+    showError('urgent-error', e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function closeUrgent() {
+  if (!urgentOpen) return;
+  if (!confirm(`Завершити заявку №${urgentOpen.number}? Користувач більше не зможе писати в цей чат.`)) return;
+  try {
+    await apiPost('/support.php', { action: 'close', ticket_id: urgentOpen.id });
+    await pollUrgent();
+    renderUrgentHeader();
+    stopUrgentPolling();
+    loadUrgent();
+  } catch (e) {
+    showError('urgent-error', e.message);
   }
 }

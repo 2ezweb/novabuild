@@ -70,12 +70,13 @@ function contractCard(c) {
     : '';
   const staged = c.type === 'staged';
   const typeBadge = staged
-    ? `<span class="badge bg-info text-dark">поетапний · ${(c.stages || []).length} ет.</span>`
+    ? `<span class="badge bg-info text-dark">поетапний${c.stage_mode === 'planned' ? ' (план)' : ''} · ${(c.stages || []).length} ет.</span>`
     : '';
   const escrowNote = c.status === 'active' && Number(c.escrowed_amount) > 0
     ? `<div class="text-muted small mt-1">в ескроу: ${esc(formatUAH(c.escrowed_amount))}${staged ? '' : ' / ' + esc(formatUAH(c.price))}</div>`
     : '';
   const payBadge = paymentBadgeHtml(c);
+  const name = contractName(c);   // several contracts with the same person — the name tells them apart
 
   return `
     <div class="card offer-card mb-3 p-3" role="button" onclick="openContractModal(${c.id})">
@@ -92,6 +93,7 @@ function contractCard(c) {
           ${!staged && c.deadline ? `<div class="text-muted small">до ${esc(c.deadline)}</div>` : ''}
         </div>
       </div>
+      ${name ? `<div class="small mt-1 text-truncate">${esc(name)}</div>` : ''}
       ${escrowNote}
       ${payBadge ? `<div class="mt-1">${payBadge}</div>` : ''}
     </div>`;

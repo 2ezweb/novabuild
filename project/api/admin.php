@@ -12,6 +12,8 @@ require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/contract_number.php';
 require_once __DIR__ . '/../includes/contract_payouts.php';
 require_once __DIR__ . '/../includes/dates.php';
+require_once __DIR__ . '/../includes/staged.php';
+require_once __DIR__ . '/../includes/estimate_document.php';
 
 $me = require_admin();
 $db = get_db();
@@ -79,6 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     if ($action === 'escalations') {
         $stmt = $db->query("
             SELECT ae.*, c.price, c.status AS contract_status, c.parent_contract_id,
+                   COALESCE(c.title, (SELECT o.title FROM offers o WHERE o.id = c.offer_id)) AS contract_title,
                    cu.first_name AS client_first_name, cu.last_name AS client_last_name,
                    fu.first_name AS freelancer_first_name, fu.last_name AS freelancer_last_name
             FROM admin_escalations ae
@@ -91,6 +94,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $escalations = $stmt->fetchAll();
         foreach ($escalations as &$e) {
             $e['contract_number'] = contract_number((int) $e['contract_id']);
+            // Same client+freelancer can have several contracts — the name tells them apart.
+            if (in_array($e['contract_title'], ['Поетапний контракт', 'Поэтапный контракт'], true)) $e['contract_title'] = null;
         }
         unset($e);
         echo json_encode($escalations);
@@ -120,6 +125,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             exit;
         }
         $contract['number'] = contract_number((int) $contract['id']);
+        $stmt = $db->prepare('SELECT title FROM offers WHERE id = ?');
+        $stmt->execute([$contract['offer_id']]);
+        $contract['offer_title'] = $contract['offer_id'] ? ($stmt->fetchColumn() ?: null) : null;
         if ($contract['parent_contract_id']) {
             $contract['parent_number'] = contract_number((int) $contract['parent_contract_id']);
         }
@@ -168,7 +176,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $stmt->execute([$escalation['contract_id']]);
         $estimates = $stmt->fetchAll();
         foreach ($estimates as &$e) {
-            $e['items'] = json_decode($e['items'], true) ?: [];
+            $e['items'] = array_map(fn($it) => $it + ['kind' => 'material'], json_decode($e['items'], true) ?: []);
+            $tot = estimate_totals($e['items']);
+            $e['works_total'] = $tot['work'];
+            $e['materials_total'] = $tot['material'];
         }
         unset($e);
 
@@ -381,6 +392,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $message = "Адміністрація закрила $nounAcc #$number як невиконаний, депозит повернуто клієнту (з холдом на " . CONTRACT_HOLD_DAYS . ' днів).';
             }
             $db->commit();
+            // A stage of a planned contract closed as done → the next stage of the plan starts.
+            if ($resolution === 'closed_success') after_stage_completed($db, $contract);
         } else { // frozen — stub: no ticket/investigation system yet, just the flag + notice
             $db->prepare('UPDATE contracts SET frozen_at = NOW() WHERE id = ?')->execute([$contract['id']]);
             $message = "Адміністрація заморозила $nounAcc #$number до з'ясування обставин. Відкрито тікет у підтримку, буде проведено внутрішнє розслідування біржі.";

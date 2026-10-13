@@ -11,9 +11,13 @@ require_once __DIR__ . '/../includes/auth_middleware.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/contract_number.php';
 require_once __DIR__ . '/../includes/client_balance.php';
+require_once __DIR__ . '/../includes/estimate_document.php';
 
 // Same demo-stub principle as connects.php: no real payment gateway behind
 // any of the three methods, and card fields are never sent here.
+//
+// Deposit gate: active contract/stage AND an estimate (not rejected) that
+// covers both «Роботи» and «Матеріали» — deposit_block_reason().
 //
 // Balance first: whatever the client has AVAILABLE on the site balance
 // (client_profiles.balance minus frozen holds, see client_balance.php) is
@@ -73,6 +77,12 @@ if ($contract['type'] === 'staged' && $contract['parent_contract_id'] === null) 
 if ($contract['status'] !== 'active') {
     http_response_code(409);
     echo json_encode(['error' => 'Депозит можна вносити лише за активним контрактом']);
+    exit;
+}
+// …and only once there's an estimate with both «Роботи» and «Матеріали».
+if ($reason = deposit_block_reason($db, $contractId)) {
+    http_response_code(409);
+    echo json_encode(['error' => $reason]);
     exit;
 }
 

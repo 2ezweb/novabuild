@@ -18,3 +18,5 @@ project/uploads/submissions/*
 !project/uploads/submissions/.gitkeep
 project/uploads/chat/*
 !project/uploads/chat/.gitkeep
+project/uploads/estimates/*
+!project/uploads/estimates/.gitkeep

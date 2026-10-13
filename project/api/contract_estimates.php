@@ -10,13 +10,17 @@ require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth_middleware.php';
 require_once __DIR__ . '/../includes/notifications.php';
 require_once __DIR__ . '/../includes/contract_number.php';
+require_once __DIR__ . '/../includes/estimate_document.php';
 
-// СМЕТА — the freelancer's bill of materials. It belongs to ONE specific
-// signed contract or stage (a staged contract's parent holds no estimate of
-// its own — each stage is its own mini-contract, see contracts.php), composed
-// only once that row is active. items is a JSON array of
-// {name, qty, unit, unit_price}. No money moves here — it's a document, but
-// submit() also stamps contracts.estimate_id on that row as a quick pointer.
+// КОШТОРИС — the freelancer's estimate. It belongs to ONE specific signed
+// contract or stage (a staged contract's parent holds no estimate of its own —
+// each stage is its own mini-contract, see contracts.php). items is a JSON array
+// of {kind: work|material, name, qty, unit, unit_price}: «Роботи» (informative,
+// affects nothing) and «Матеріали» (as before); items without kind = material.
+// The freelancer fills a form; the CLIENT gets a generated .docx document
+// (includes/estimate_document.php, stored at submit time in document_path) plus
+// a short summary. No money moves here; submit() also stamps
+// contracts.estimate_id on that row as a quick pointer.
 
 $me = require_auth();
 $db = get_db();
@@ -43,7 +47,8 @@ function clean_items($raw): array {
         $unit = trim((string)($it['unit'] ?? ''));
         $up   = is_numeric($it['unit_price'] ?? null) ? (float) $it['unit_price'] : 0;
         if ($name === '' || $qty <= 0 || $up < 0) continue;
-        $out[] = ['name' => $name, 'qty' => $qty, 'unit' => $unit, 'unit_price' => $up];
+        $kind = ($it['kind'] ?? 'material') === 'work' ? 'work' : 'material';
+        $out[] = ['kind' => $kind, 'name' => mb_substr($name, 0, 255), 'qty' => $qty, 'unit' => mb_substr($unit, 0, 20), 'unit_price' => $up];
     }
     return $out;
 }
@@ -57,7 +62,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     $stmt->execute([$contractId]);
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
-        $r['items'] = json_decode($r['items'], true) ?: [];
+        $r['items'] = array_map(fn($it) => $it + ['kind' => 'material'], json_decode($r['items'], true) ?: []);
+        $totals = estimate_totals($r['items']);
+        $r['works_total']     = $totals['work'];
+        $r['materials_total'] = $totals['material'];
+        // Estimates from before documents existed get theirs on first read.
+        if (empty($r['document_path'])) {
+            try { $r['document_path'] = generate_estimate_document($db, $r); } catch (Throwable $e) { $r['document_path'] = null; }
+        }
     }
     unset($r);
 
@@ -95,7 +107,15 @@ if ($action === 'submit') {
         echo json_encode(['error' => 'Кошторис складається для конкретного етапу, а не для всього поетапного контракту']);
         exit;
     }
-    if ($contract['status'] !== 'active') {
+    // Active contract/stage — or a not-yet-started stage of an ACCEPTED plan
+    // («За планом»): a planned contract gets an estimate for every stage up front.
+    $estimable = $contract['status'] === 'active';
+    if ($contract['status'] === 'planned' && $contract['parent_contract_id']) {
+        $stmt = $db->prepare('SELECT status FROM contracts WHERE id = ?');
+        $stmt->execute([$contract['parent_contract_id']]);
+        $estimable = $stmt->fetchColumn() === 'active';
+    }
+    if (!$estimable) {
         http_response_code(409);
         echo json_encode(['error' => 'Кошторис можна скласти лише після підписання контракту']);
         exit;
@@ -108,13 +128,24 @@ if ($action === 'submit') {
         echo json_encode(['error' => 'Додайте хоча б одну позицію кошторису']);
         exit;
     }
-
-    $stmt = $db->prepare("SELECT id FROM contract_estimates WHERE contract_id = ? AND status = 'submitted'");
-    $stmt->execute([$contractId]);
-    if ($stmt->fetch()) {
-        http_response_code(409);
-        echo json_encode(['error' => 'Попередній кошторис щодо цього контракту ще на розгляді в замовника']);
+    // Both parts are required — without them the client can't make the deposit (escrow.php).
+    if (!estimate_covers_both($items)) {
+        http_response_code(422);
+        echo json_encode(['error' => 'Кошторис має містити і роботи, і матеріали — додайте хоча б по одній позиції в кожен розділ']);
         exit;
+    }
+
+    $stmt = $db->prepare("SELECT id, items FROM contract_estimates WHERE contract_id = ? AND status = 'submitted'");
+    $stmt->execute([$contractId]);
+    if ($pending = $stmt->fetch()) {
+        // An old-format estimate (no «Роботи» part) blocks the deposit — the
+        // freelancer may replace it right away; it's marked rejected (superseded).
+        if (estimate_covers_both(json_decode($pending['items'], true) ?: [])) {
+            http_response_code(409);
+            echo json_encode(['error' => 'Попередній кошторис щодо цього контракту ще на розгляді в замовника']);
+            exit;
+        }
+        $db->prepare("UPDATE contract_estimates SET status = 'rejected', decided_at = NOW() WHERE id = ?")->execute([$pending['id']]);
     }
 
     $total = 0.0;
@@ -128,6 +159,11 @@ if ($action === 'submit') {
     $estimateId = (int) $db->lastInsertId();
 
     $db->prepare('UPDATE contracts SET estimate_id = ? WHERE id = ?')->execute([$estimateId, $contractId]);
+
+    // The client's copy — a .docx snapshot. Non-fatal: if it fails here, GET retries.
+    $stmt = $db->prepare('SELECT * FROM contract_estimates WHERE id = ?');
+    $stmt->execute([$estimateId]);
+    try { generate_estimate_document($db, $stmt->fetch()); } catch (Throwable $e) { /* regenerated lazily on read */ }
 
     $noun = $contract['parent_contract_id'] ? 'етапу' : 'контракту';
     create_notification($db, (int)$contract['client_user_id'], 'estimate_submitted',
