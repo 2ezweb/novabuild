@@ -1,0 +1,11 @@
+# Defense in depth: uploads/avatars/ and uploads/offers/ are meant to be
+# publicly *readable* (images/docs), but nothing here should ever be
+# *executable* — even though the upload endpoints already whitelist
+# extensions strictly, this ensures a bug there can't turn into RCE.
+# uploads/verification/ already has its own "Require all denied" (no direct
+# access at all); this is redundant-but-harmless there.
+Options -Indexes
+
+<FilesMatch "\.(php|php3|php4|php5|php7|phtml|pl|py|cgi|sh|asp|aspx|exe)$">
+  Require all denied
+</FilesMatch>

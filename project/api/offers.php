@@ -9,6 +9,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth_middleware.php';
 
+// How long an offer stays visible (with the "Уже найден работник" badge) to
+// other freelancers after a contract for it goes active — see
+// offers.outdated_at, set by contracts.php::accept. After this it's excluded
+// from the feed entirely (2 days). Computed live on every read, no cron involved.
+const OUTDATED_GRACE_HOURS = 48;
+
 $me = require_auth();
 $db = get_db();
 
@@ -42,17 +48,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             JOIN users u ON u.id = cp.user_id
             LEFT JOIN bids b ON b.offer_id = o.id
         ';
+        // Offers past their outdated grace window are dropped from the feed
+        // entirely — not just un-badged. This condition always applies,
+        // status filter or not.
+        $conditions = ['(o.outdated_at IS NULL OR o.outdated_at > DATE_SUB(NOW(), INTERVAL ' . OUTDATED_GRACE_HOURS . ' HOUR))'];
         $params = [];
         if ($status) {
-            $sql .= ' WHERE o.status = ?';
+            $conditions[] = 'o.status = ?';
             $params[] = $status;
         }
+        $sql .= ' WHERE ' . implode(' AND ', $conditions);
         $sql .= ' GROUP BY o.id ORDER BY o.created_at DESC';
         $stmt = $db->prepare($sql);
         $stmt->execute($params);
     }
 
-    echo json_encode($stmt->fetchAll());
+    // is_outdated ("Уже найден работник") on both the client's own list and the
+    // freelancer feed — only the feed actually drops the offer after the grace
+    // window above; the client keeps seeing all of theirs regardless.
+    $offers = $stmt->fetchAll();
+    foreach ($offers as &$o) {
+        $o['is_outdated'] = !empty($o['outdated_at']);
+    }
+    unset($o);
+
+    echo json_encode($offers);
     exit;
 }
 

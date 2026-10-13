@@ -131,6 +131,17 @@ async function apiUpload(path, formData) {
   return data;
 }
 
+// ─── DEMO CARD INPUT FORMATTING (shared by connects.js and chat.js) ──────────
+function formatCardNumber(input) {
+  const digits = input.value.replace(/\D/g, '').slice(0, 16);
+  input.value = digits.replace(/(.{4})/g, '$1 ').trim();
+}
+
+function formatCardExpiry(input) {
+  const digits = input.value.replace(/\D/g, '').slice(0, 4);
+  input.value = digits.length > 2 ? digits.slice(0, 2) + '/' + digits.slice(2) : digits;
+}
+
 function formatFileSize(bytes) {
   if (bytes < 1024) return bytes + ' Б';
   if (bytes < 1024 * 1024) return Math.round(bytes / 1024) + ' КБ';
@@ -231,6 +242,11 @@ async function requireAuth() {
       homeLink.href = homeHref;
       homeLink.textContent = me.role === 'admin' ? 'Админка' : 'Дашборд';
     }
+    const isClientOrFreelancer = me.role === 'client' || me.role === 'freelancer';
+    const workLink = document.getElementById('nav-work-link');
+    if (workLink) workLink.style.display = isClientOrFreelancer ? '' : 'none';
+    const chatLink = document.getElementById('nav-chat-link');
+    if (chatLink) chatLink.style.display = isClientOrFreelancer ? '' : 'none';
 
     initNotificationBell();
     return me;
@@ -303,6 +319,22 @@ async function markNotificationRead(id, el) {
     const dot = document.getElementById('bell-dot');
     if (dot && !document.querySelectorAll('.notification-unread').length) dot.style.display = 'none';
   } catch { /* non-critical */ }
+}
+
+// ─── CABINET TABS (shared by cabinet.html, connects.html, finance.html) ──────
+// The tab bar itself is hidden for admin (only "Профиль" would apply — not
+// worth a single-item tab strip); "Купить коннекты" only makes sense for a
+// freelancer (clients don't have connects).
+function setupCabinetTabs(me) {
+  const tabs = document.getElementById('cabinet-tabs');
+  if (!tabs) return;
+  tabs.style.display = me.role === 'admin' ? 'none' : '';
+  const connectsTab = document.getElementById('tab-connects-item');
+  if (connectsTab) connectsTab.style.display = me.role === 'freelancer' ? '' : 'none';
+}
+
+function formatUAH(n) {
+  return '₴ ' + Number(n || 0).toLocaleString('uk-UA');
 }
 
 function statusLabel(s) {

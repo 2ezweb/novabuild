@@ -8,6 +8,7 @@ window.addEventListener('DOMContentLoaded', async () => {
 function fillProfileForm() {
   const role = currentUser.role;
 
+  setupCabinetTabs(currentUser);
   document.getElementById('profile-fields-freelancer').style.display = role === 'freelancer' ? '' : 'none';
   document.getElementById('profile-fields-client').style.display = role === 'client' ? '' : 'none';
   document.getElementById('profile-fields-admin').style.display = role === 'admin' ? '' : 'none';
@@ -40,6 +41,69 @@ function fillProfileForm() {
   renderAvatarEl(document.getElementById('profile-avatar'), displayName(currentUser), currentUser.avatar_path);
   setVerificationBadge(currentUser.verification_status);
   renderVerificationAction();
+  renderBalanceBlock();
+}
+
+// ─── BALANCE (client + freelancer) ───────────────────────────────────────────
+function renderBalanceBlock() {
+  const role = currentUser.role;
+  const block = document.getElementById('balance-block');
+  if (role !== 'client' && role !== 'freelancer') { block.style.display = 'none'; return; }
+
+  block.style.display = '';
+
+  const hint = document.getElementById('balance-hint');
+  const action = document.getElementById('withdrawal-action');
+
+  if (role === 'client') {
+    const frozen = currentUser.frozen_amount || 0;
+    document.getElementById('balance-amount').textContent = formatUAH(currentUser.balance);
+    hint.textContent = frozen > 0
+      ? `Из них ${formatUAH(frozen)} заморожено (депозит по незавершённому контракту) — недоступно для новых депозитов.`
+      : 'Пополняется автоматически, если контракт закрыт как невыполненный — депозит возвращается сюда.';
+    action.innerHTML = '';
+  } else {
+    document.getElementById('balance-amount').textContent = formatUAH(currentUser.balance);
+    hint.textContent = 'Зачисляется автоматически, когда клиент закрывает контракт как выполненный.';
+    loadWithdrawalStatus();
+  }
+}
+
+async function loadWithdrawalStatus() {
+  const action = document.getElementById('withdrawal-action');
+  try {
+    const res = await apiFetch('/wallet.php');
+    currentUser.balance = res.balance;
+    document.getElementById('balance-amount').textContent = formatUAH(res.balance);
+
+    const pending = res.requests.find(r => r.status === 'pending');
+    action.innerHTML = pending
+      ? `<span class="text-muted small">⏳ Заявка на вывод ${formatUAH(pending.amount)} в обработке</span>`
+      : `<button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#withdrawalModal" onclick="openWithdrawalModal()">Вывести</button>`;
+  } catch {
+    action.innerHTML = '';
+  }
+}
+
+function openWithdrawalModal() {
+  hideError('withdrawal-error');
+  document.getElementById('withdrawal-available').textContent = formatUAH(currentUser.balance);
+  document.getElementById('withdrawal-amount').value = '';
+}
+
+async function submitWithdrawal() {
+  hideError('withdrawal-error');
+  const amount = Number(val('withdrawal-amount'));
+  if (!amount || amount <= 0) return showError('withdrawal-error', 'Укажите сумму');
+  if (amount > (currentUser.balance ?? 0)) return showError('withdrawal-error', 'Недостаточно средств на балансе');
+
+  try {
+    await apiPost('/wallet.php', { action: 'request_withdrawal', amount });
+    bootstrap.Modal.getInstance(document.getElementById('withdrawalModal')).hide();
+    loadWithdrawalStatus();
+  } catch (e) {
+    showError('withdrawal-error', e.message);
+  }
 }
 
 function renderVerificationAction() {

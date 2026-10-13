@@ -18,20 +18,26 @@ if ($me['role'] === 'freelancer') {
     $stmt = $db->prepare('
         SELECT u.id, u.email, u.role, u.status, u.created_at,
                u.first_name, u.last_name, u.avatar_path, u.verification_status,
-               fp.phone, fp.website, fp.specialization, fp.about, fp.connects_balance
+               fp.phone, fp.website, fp.specialization, fp.about, fp.connects_balance, fp.balance
         FROM users u
         LEFT JOIN freelancer_profiles fp ON fp.user_id = u.id
         WHERE u.id = ?
     ');
 } elseif ($me['role'] === 'client') {
-    $stmt = $db->prepare('
+    // frozen_amount = holds from failure-closed contracts still within the
+    // 7-day window, or under an unresolved dispute (which blocks release
+    // even past 7 days) — see contracts.php::close() and disputes.php.
+    $stmt = $db->prepare("
         SELECT u.id, u.email, u.role, u.status, u.created_at,
                u.first_name, u.last_name, u.avatar_path, u.verification_status,
-               cp.company_name, cp.phone
+               cp.company_name, cp.phone, cp.balance,
+               (SELECT COALESCE(SUM(bh.amount), 0) FROM balance_holds bh
+                WHERE bh.user_id = u.id AND bh.resolution = 'pending'
+                  AND (bh.release_at > NOW() OR bh.disputed_at IS NOT NULL)) AS frozen_amount
         FROM users u
         LEFT JOIN client_profiles cp ON cp.user_id = u.id
         WHERE u.id = ?
-    ');
+    ");
 } else {
     $stmt = $db->prepare('
         SELECT id, email, role, status, created_at,

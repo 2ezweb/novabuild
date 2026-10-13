@@ -1,0 +1,36 @@
+.finance-chart-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.finance-line-key {
+  display: inline-block;
+  width: 14px;
+  height: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.finance-legend-item {
+  display: inline-flex;
+  align-items: center;
+  color: #52514e;
+}
+
+.finance-tooltip {
+  position: absolute;
+  display: none;
+  pointer-events: none;
+  background: #fcfcfb;
+  border: 1px solid #e1e0d9;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(11, 11, 11, 0.12);
+  padding: 8px 10px;
+  min-width: 160px;
+  z-index: 5;
+}
+
+.finance-point {
+  cursor: pointer;
+}

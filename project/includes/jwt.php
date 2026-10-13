@@ -1,5 +1,5 @@
 <?php
-define('JWT_SECRET', 'CHANGE_THIS_TO_A_LONG_RANDOM_STRING_32CHARS+');
+define('JWT_SECRET', '421aa8b56ec636468ba3b456c9ab376aa0df7c249a1306d63ffdeec47b373703');
 define('JWT_TTL', 60 * 60 * 24 * 7); // 7 days
 
 function jwt_encode(array $payload): string {

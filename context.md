@@ -12,9 +12,28 @@ NovaBuild — Context File
 
 
 Фронт: HTML / CSS / JS + Bootstrap 5 (визуал — демка, подтянем позже)
-Бэк: PHP (без фреймворков, без Composer)
-БД: MySQL
+Бэк: PHP 8.2 (без фреймворков, без Composer)
+БД: MySQL / MariaDB 10.11 (на тестовом хостинге)
 Авторизация: JWT вручную на HMAC-SHA256, токен в localStorage
+Пароли: Argon2id + серверный pepper (includes/password.php), fallback на bcrypt
+Антибрутфорс: DB-based rate limiting (таблица rate_limit_hits, includes/rate_limit.php) — Redis на шаред-хостинге нет
+Реалтайм-чат: Pusher Channels через REST вручную (HMAC-подпись, без SDK), фолбэк на polling
+Почта: PHP mail() (на хостинге — реальная отправка, From: no-reply@test2.2ezweb.tech)
+
+
+Деплой и окружение — ВАЖНО (2026-09-10)
+
+Проект льётся сразу на тестовый сервак по FTP (test2.2ezweb.tech), локального прогона обычно нет.
+Из-за этого настройки «весёлые»: боевые для тест-сервера значения секретов лежат прямо в репозитории —
+осознанный компромисс для одноразового тест-стенда, НЕ баг, не «чинить» и не паниковать:
+  - includes/db.php       — DB kotegg007_novabuild / kotegg007_gospodin / only4test (шаред-хостинг, cPanel-префикс)
+  - includes/jwt.php      — реальный 64-hex JWT_SECRET (плейсхолдер убран)
+  - includes/password.php — реальный 64-hex PASSWORD_PEPPER
+  - includes/pusher.php   — реальные Pusher app_id / key / secret (кластер eu)
+На хостинге НЕТ shell / mysqldump / cron. Следствия: слепок схемы через mysqldump больше не делаем
+(см. «Слепок БД» ниже), а все «отложенные» операции (грейс-период оффера, разморозка холда, чистка
+rate_limit_hits) считаются на лету в запросах или чистятся оппортунистически, без крона.
+Если проект поедет в прод — все 4 файла с секретами перегенерить и вынести из репы.
 
 
 Структура проекта
@@ -30,23 +49,54 @@ NovaBuild — Context File
     avatar.php          — POST multipart-загрузка аватара (любая роль), резайз через GD до 200×200
     verification.php    — POST заявка на верификацию (client/freelancer), multipart-загрузка PDF/PNG/JPEG
     notifications.php   — GET мои уведомления / POST mark_read|mark_all_read
-    admin.php           — admin-only: GET users|verification_requests|document, POST approve|reject
+    admin.php           — admin-only: GET users|verification_requests|document|withdrawal_requests|disputes;
+                          POST approve|reject (верификация) | approve_withdrawal|reject_withdrawal |
+                          resolve_dispute {hold_id, resolution:to_client|to_freelancer}
     offer_attachments.php — GET список файлов оффера (любая роль) / POST загрузка (владелец-клиент,
                           multipart, поле files[]) / DELETE удалить один файл (владелец-клиент)
+    conversations.php  — GET мои переписки (+ последнее сообщение / непрочитанные) / GET ?id=N одна /
+                          POST {action:start, other_user_id} — client-only, find-or-create по паре клиент+фрилансер
+    messages.php       — GET ?conversation_id=N (&after_id=M для polling) — только участник; помечает
+                          входящие read_at при чтении / POST {conversation_id, body} — INSERT + pusher + уведомление
+    contracts.php      — GET мои контракты (?conversation_id / ?status) / POST propose (client) |
+                          accept|reject (freelancer, статус proposed) | close {outcome:success|failure}
+    contract_change_requests.php — GET ?contract_id (последний pending) / POST propose (любая сторона,
+                          активный контракт) | respond {request_id, accept} (только вторая сторона)
+    escrow.php         — POST {action:deposit, contract_id, amount, method} — client-only, активный контракт,
+                          method card|gpay|liqpay (заглушки, карту на бэк не шлём); плюсует escrowed_amount
+    disputes.php       — GET ?contract_id (текущий холд) / POST {action:raise, contract_id} — freelancer-only,
+                          пока холд pending и release_at в будущем; notify_admins
+    wallet.php         — freelancer-only: GET {balance, requests[]} / POST {action:request_withdrawal, amount}
+                          (резерв средств сразу, возврат при отклонении админом)
+    finance.php        — GET ?period=month|year|all — ряд «пришло/ушло» по wallet_transactions, бакеты с нулями
+    connects.php       — POST {action:purchase, amount, method} — freelancer-only, докупка коннектов
+                          (1 ₴ = 1 коннект, заглушка оплаты). Отменяет заметку «докупку коннектов не делали»
+    freelancer_profile.php — GET ?user_id — client-only, peer-view профиля фрилансера (фамилия только инициалом)
+    pusher_config.php  — GET (авторизованный) — публичный Pusher key + cluster + флаг configured
+    pusher_auth.php    — POST — подпись подписки на private-conversation-{id}, проверяет что вызывающий участник
   /includes
-    db.php              — подключение PDO к MySQL (get_db())
-    jwt.php             — jwt_encode() / jwt_decode(), секрет в JWT_SECRET
+    db.php              — PDO к MySQL (get_db()); тут же глушится display_errors + кастомный error_handler
+                          (чтобы PHP-warning не ломал JSON-ответ), боевые креды тест-сервера
+    jwt.php             — jwt_encode() / jwt_decode(), JWT_SECRET (реальный 64-hex, не плейсхолдер)
     auth_middleware.php — require_auth() → payload или 401; require_admin() → payload или 403
     image.php           — resize_square_image() — GD-хелпер: center-crop + resample до NxN, сохраняет JPEG
     notifications.php   — create_notification(), notify_admins() — INSERT в таблицу notifications
+    password.php        — hash_password() / verify_and_upgrade_password() — Argon2id + pepper, прозрачный
+                          апгрейд старых голых bcrypt-хешей при успешном входе
+    rate_limit.php      — rate_limit_check/record/clear(), client_ip() — скользящее окно по rate_limit_hits
+    pusher.php          — pusher_trigger() (fire-and-forget, глотает все Throwable, timeout 3с),
+                          pusher_channel_auth() — REST Pusher вручную, без SDK
   /uploads
     avatars/            — публично отдаётся веб-сервером напрямую (аватарки не приватные)
     verification/       — .htaccess (Require all denied) — НЕ отдаётся напрямую, только через
                           admin.php?action=document (стримится PHP после require_admin() + finfo)
     offers/             — публично отдаётся напрямую (файлы офферов не приватные — их и так видят
                           все фрилансеры в открытых офферах)
+    .htaccess          — НОВЫЙ: Options -Indexes + запрет исполнения .php/.pl/.py/... во всём uploads/
+                          (defense-in-depth против upload→RCE)
   /sql
-    schema.sql          — полный слепок структуры БД, см. ниже
+    (пусто) — schema.sql удалён: на FTP-хостинге нет mysqldump. Схема теперь синкается так — пользователь
+    экспортит БД из phpMyAdmin тест-сервера и кидает .sql в чат (последний: kotegg007_novabuild.sql)
   /frontend
     index.html          — редирект-заглушка: смотрит localStorage token → pages/dashboard.html или pages/login.html
     /pages
@@ -55,8 +105,16 @@ NovaBuild — Context File
       verify.html         — ввод 6-значного кода подтверждения email после регистрации/при логине
       cabinet.html        — личный кабинет (client/freelancer/admin — поля разные), аватар, верификация
       dashboard.html       — рабочий дашборд (офферы клиента / лента фрилансера); редиректит admin → admin.html
-      admin.html           — админка: список юзеров + заявки на верификацию (навигация в сайдбаре справа)
+      admin.html           — админка: юзеры + заявки на верификацию + заявки на вывод + спорные контракты
       offer.html            — client-only: детали оффера + ранжированный список заявок фрилансеров
+      chats.html           — инбокс переписок (client/freelancer)
+      chat.html            — переписка + ХАБ всего жизненного цикла контракта (баннер контракта, меню
+                             «Доп. функции»: предложить оффер / accept-reject / оплатить эскроу /
+                             изменить условия / закрыть / оспорить)
+      contracts.html       — мои контракты: предложенные / активные / история (client/freelancer)
+      connects.html        — докупка коннектов (freelancer): выбор суммы + демо-форма карты
+      finance.html         — финансовый отчёт: график пришло/ушло по периодам (client/freelancer)
+      freelancer-profile.html — client-only: профиль фрилансера (открывается из списка заявок / из чата)
     /js
       common.js           — apiFetch/apiPost/apiPut/apiDelete/apiUpload (кидают Error с полными полями
                             ответа, не только .message), esc/val/initials/displayName/assetUrl/
@@ -72,9 +130,20 @@ NovaBuild — Context File
                             (+ сообщение + файлы оффера), модалка деталей оффера (openOfferDetail),
                             загрузка/удаление файлов оффера в модалке редактирования
       admin.js             — список юзеров, заявки на верификацию, approve/reject, просмотр документа
-      offer.js              — загрузка оффера + ранжированного списка заявок (bidCard())
+      offer.js              — загрузка оффера + ранжированного списка заявок (bidCard()) — карточки теперь
+                            ссылаются на freelancer-profile.html + кнопка «✉ Написать» (старт переписки)
+      chats.js             — список переписок (chatRow())
+      chat.js              — сообщения (Pusher или polling на 4с) + весь UI контракта / эскроу / споров /
+                            изменения условий (баннер + меню «Доп. функции» + модалки propose/change/deposit)
+      contracts.js         — три секции контрактов (pending / active / history), contractCard()
+      connects.js          — шаги «сумма → способ оплаты → подтверждение», демо-карта
+      finance.js           — рисует график по /finance.php своим SVG, без библиотек
+      freelancer-profile.js — грузит /freelancer_profile.php, кнопка «Написать»
+      ДОБАВЛЕНО в common.js: formatUAH()/formatCardNumber()/formatCardExpiry(), setupCabinetTabs(),
+                            переключение nav-ссылок «Чат»/«Контракты» (только client/freelancer)
     /css
-      common.css, auth.css, cabinet.css, dashboard.css, admin.css — по файлу на страницу + общий
+      common.css, auth.css, cabinet.css, dashboard.css, admin.css, chat.css, connects.css, finance.css
+      — по файлу на страницу + общий. Кэш-бастинг ?v=N сейчас на v=8 (см. конвенцию ниже)
 
   ПРИМЕЧАНИЕ: раньше фронтенд был SPA на #hash-роутинге (index.html + app.js + style.css).
   Переведено на классическую многостраничную схему (реальная навигация между .html), т.к. без React
@@ -142,20 +211,21 @@ Email-верификация при регистрации (код на почт
   email_verified_at=NOW(), чистит код, выдаёт JWT; если уже верифицирован — просто перевыдаёт JWT,
   идемпотентно) и resend_code (email → перегенерирует код, шлёт письмо заново; 400 если уже подтверждён).
   ВАЖНО про mail(): без Composer/библиотек — используется встроенная функция PHP `mail()`.
-  На этой машине (OSPanel) php.ini → sendmail_path указывает на modules/sendmail/sendmail.exe -local —
+  ОБНОВЛЕНО 2026-09-10: проект живёт на FTP-хостинге (test2.2ezweb.tech), где mail() реально
+  отправляет письма (From: NovaBuild <no-reply@test2.2ezweb.tech>). Абзац ниже про OSPanel-перехватчик
+  актуален только для редкого локального прогона.
+  На машине OSPanel php.ini → sendmail_path указывает на modules/sendmail/sendmail.exe -local —
   это локальный "перехватчик", который НЕ отправляет письма в интернet, а сохраняет каждое как .txt
   в userdata/temp/email/. Для демо это удобно (код виден в файле), но в проде sendmail_path/SMTP
   нужно будет настроить на реальный почтовый релей (или переходить на PHPMailer/SMTP-библиотеку).
 
-Слепок БД в /project/sql/schema.sql (обновляется перед каждым коммитом)
+Слепок БД — БОЛЬШЕ НЕ ВЕДЁТСЯ (2026-09-10)
 
-  Команда: mysqldump --no-data --routines --triggers --databases novabuild | sed -E 's/ AUTO_INCREMENT=[0-9]+//'
-  Только структура (CREATE DATABASE + CREATE TABLE), без данных — репозиторий публичный, реальные
-  email/bcrypt-хеши в git-историю не кладём. AUTO_INCREMENT-счётчики вырезаны sed'ом, иначе дамп
-  "мигал" бы диффом на каждый закоммиченный тестовый инсерт без реальных изменений схемы.
-  Цель: `mysql -uroot < project/sql/schema.sql` на чистой машине — и вся схема (5 таблиц, FK, ENUM'ы)
-  разворачивается за один шаг. Обновляется вручную перед каждым коммитом, где менялась схема (а не
-  автоматически хуком) — эта договорённость с пользователем действует на все следующие сессии.
+  project/sql/schema.sql удалён. Причина: проект теперь живёт на FTP-хостинге, где нет доступа к
+  mysqldump / shell, старая команда `mysqldump --no-data ...` неприменима. Схема синкается вручную:
+  пользователь экспортит БД из phpMyAdmin тест-сервера и кидает .sql-файл в чат, когда он нужен
+  (последний — kotegg007_novabuild.sql, MariaDB 10.11, PHP 8.2). Прежняя договорённость «обновлять
+  schema.sql перед каждым коммитом со схемой» отменена — файла больше нет.
 
 Личные кабинеты, верификация, уведомления, админка (2026-07-06)
 
@@ -372,24 +442,545 @@ Email-верификация при регистрации (код на почт
        (overflow-wrap: anywhere) на строках файлов в renderAttachments()/attachmentRow() — длинное имя
        файла без пробелов раньше могло вытолкнуть контейнер вбок, теперь переносится.
 
-База данных — 7 таблиц
+════════════════════════════════════════════════════════════════════════════
+Крупный заход 2026-09-10: чат, контракты, эскроу, споры, кошелёк, безопасность
+(делалось в другой сессии на другом устройстве — этот блок восстанавливает контекст)
+════════════════════════════════════════════════════════════════════════════
 
-sqlusers                  — id, email (он же логин админа), password_hash, role ENUM(client|freelancer|admin),
-                         first_name, last_name, avatar_path, status ENUM(active|banned),
+Общая картина нового флоу сделки:
+  лента офферов → фрилансер ставит заявку коннектами → клиент открывает список заявок (offer.html),
+  смотрит профиль фрилансера (freelancer-profile.html) и жмёт «✉ Написать» → создаётся conversation →
+  весь дальнейший цикл идёт в chat.html: клиент «Предлагает оффер» (contract proposed) → фрилансер
+  accept/reject → active → клиент вносит депозит в эскроу (escrow.php) → любая сторона может
+  предложить изменение цены/срока (contract_change_requests) → закрытие: success (деньги фрилансеру)
+  или failure (возврат клиенту + холд на 7 дней, который фрилансер может оспорить).
+
+Чат (conversations + messages; api/conversations.php, api/messages.php)
+  Одна переписка на пару client+freelancer (UNIQUE). Начать может только клиент (POST {action:start,
+  other_user_id} — find-or-create). messages.php: GET отдаёт историю (или ?after_id=N для polling-
+  дозагрузки) и тут же помечает входящие read_at=NOW(); POST шлёт сообщение (body ≤ 5000), пишет
+  уведомление 'new_message' второй стороне и дёргает pusher_trigger('new-message'). Доступ — строго
+  участник переписки, иначе 403. Страницы: chats.html (инбокс: последнее сообщение + счётчик
+  непрочитанных коррелированными подзапросами), chat.html (переписка + хаб контракта).
+
+Реалтайм — Pusher Channels вручную (includes/pusher.php)
+  Без SDK/Composer: pusher_trigger() сам собирает REST-запрос к api-eu.pusher.com и подписывает
+  HMAC-SHA256. Сбой отправки не фатален (try/catch(\Throwable) — отсутствующий curl_* в PHP 8 это
+  \Error; timeout 3с): чат продолжает работать на polling. api/pusher_config.php — GET
+  (авторизованный) отдаёт публичный key+cluster и флаг configured. api/pusher_auth.php — POST,
+  подписывает подписку на private-conversation-{id}, предварительно проверив что вызывающий участник.
+  Фронт (chat.js): если configured и подключён Pusher-JS — подписка на канал, иначе setInterval 4с
+  с ?after_id. Ключи Pusher реально лежат в pusher.php (тест-стенд, см. «Деплой и окружение»).
+
+Контракты (contracts; api/contracts.php)
+  status: proposed → active → completed | failed | rejected. Один proposed/active контракт на
+  переписку (иначе 409).
+  - propose: только клиент, в своей переписке. offer_id — необязательный контекст (проставляется
+    если чат начали из заявки на конкретный оффер); чужой/битый id молча обнуляется.
+  - accept/reject: только фрилансер, только из proposed. accept → active и штампует
+    offers.outdated_at = NOW() у оффера-источника.
+  - close {outcome: success|failure}: права асимметричны. Клиент закрывает когда угодно единолично.
+    Фрилансер — только если последнее сообщение в переписке его И ему ≥ 14 дней
+    (FREELANCER_CLOSE_SILENCE_DAYS, «клиент пропал»), проверяется вживую по messages, без крона.
+    success → escrowed_amount уходит на freelancer_profiles.balance + 2 строки wallet_transactions
+    (contract_payment у клиента, contract_earning у фрилансера), контракт completed, эскроу обнулён.
+    failure → escrowed_amount возвращается на client_profiles.balance + строка 'deposit' + строка
+    в balance_holds (release_at = NOW() + 7 дней, HOLD_DAYS), контракт failed.
+
+Изменение условий (contract_change_requests; api/contract_change_requests.php)
+  Любая сторона активного контракта предлагает new_price и/или new_deadline (один pending за раз).
+  Отвечает только ВТОРАЯ сторона (свой запрос подтвердить нельзя, 403). На accept новые значения
+  применяются к contracts. GET ?contract_id отдаёт последний pending (для баннера в чате).
+
+Эскроу (api/escrow.php)
+  POST {action:deposit, contract_id, amount, method}. Только клиент, только активный контракт.
+  method ∈ card|gpay|liqpay — все ЗАГЛУШКИ: реального процессинга нет, поля карты на бэкенд не
+  отправляются (фронт держит их у себя). MIN 10 / MAX 1 000 000 ₴. Плюсует contracts.escrowed_amount,
+  пишет 'deposit' в wallet_transactions, шлёт 'escrow_deposit' фрилансеру. UI — кнопка «💳 Оплатить
+  контракт» на баннере активного контракта в чате (chat.js openDepositModal/submitDeposit).
+
+Кошелёк и вывод (freelancer_profiles.balance / client_profiles.balance, wallet_transactions,
+withdrawal_requests; api/wallet.php)
+  У фрилансера и клиента появился денежный баланс (DECIMAL). wallet.php (freelancer-only):
+  GET → {balance, requests[]}; POST {action:request_withdrawal, amount} — MIN 1 ₴, одна pending-заявка
+  за раз, amount ≤ balance. Деньги списываются с баланса СРАЗУ (резерв), возвращаются автоматически
+  если админ отклонит. Одобрение/отклонение — в админке (admin.php approve_withdrawal /
+  reject_withdrawal): approve финализирует и пишет 'withdrawal' в wallet_transactions, reject
+  возвращает сумму на баланс + уведомление. me.php: фрилансер теперь получает fp.balance; клиент —
+  cp.balance и frozen_amount (SUM холдов ещё в 7-дневном окне ИЛИ под спором). Кабинет (cabinet.js):
+  блок баланса для обеих ролей, модалка вывода у фрилансера.
+
+Споры и холды (balance_holds; api/disputes.php)
+  Контракт закрыт как failure → депозит клиента вернулся ему, но «подвис» холдом на 7 дней.
+  disputes.php: GET ?contract_id — текущий pending-холд (участник); POST {action:raise, contract_id}
+  — только фрилансер, пока холд pending, release_at в будущем и disputed_at пуст; ставит
+  disputed_at=NOW() и notify_admins('contract_disputed'). Спор блокирует разморозку и после 7 дней
+  (в me.php frozen_amount учитывает disputed_at IS NOT NULL бессрочно). Админка: GET disputes
+  (холды pending + disputed), POST resolve_dispute {hold_id, resolution: to_client|to_freelancer};
+  to_freelancer перекидывает сумму client.balance → freelancer.balance + wallet_transactions, обе
+  стороны получают уведомление.
+  БАГ-ЗАМЕТКА: resolve_dispute пишет resolution как 'to_client'/'to_freelancer', а ENUM в
+  balance_holds — ('pending','released_to_client','released_to_freelancer'). Рассинхрон кода и
+  схемы; ветка на боевой БД ещё не отрабатывала (в дампе balance_holds пуст).
+
+Финансовый отчёт (api/finance.php; finance.html/js)
+  GET ?period=month|year|all → временной ряд «пришло/ушло» из wallet_transactions (фрилансер:
+  contract_earning vs withdrawal; клиент: deposit vs contract_payment), бакеты предзаполнены нулями
+  чтобы разрывы не рисовались прямой линией. finance.js рисует график своим SVG, без библиотек.
+  (Комментарий в шапке finance.php про «только withdrawal реально пишется» устарел — эскроу-флоу
+  уже пишет все типы.)
+
+Докупка коннектов (api/connects.php; connects.html/js)
+  POST {action:purchase, amount, method} — freelancer-only. 1 ₴ = 1 коннект, MIN 10 / MAX 100 000 ₴,
+  method — та же заглушка card|gpay|liqpay, карта на бэк не уходит. Плюсует connects_balance,
+  уведомление 'connects_purchased'. ОТМЕНЯЕТ прежнюю заметку в разделе «Ставки коннектами»
+  («никакой монетизации/докупки коннектов не делали»).
+
+Профиль фрилансера для клиента (api/freelancer_profile.php; freelancer-profile.html/js)
+  GET ?user_id — только клиент. Peer-view: first_name + last_name_initial (только инициал!), avatar,
+  verification_status, specialization, about. Открывается из карточек заявок в offer.html и из чата.
+  bids.php GET теперь дополнительно отдаёт freelancer_user_id для этих ссылок.
+
+«Неактуальные» офферы (offers.outdated_at; offers.php)
+  По офферу активировался контракт (contracts.php accept) → в оффер пишется outdated_at=NOW().
+  offers.php GET для фрилансера: OUTDATED_GRACE_HOURS = 24 — первые сутки оффер показывается с
+  флагом is_outdated=true (бейдж «Неактуален» в dashboard.js), потом вообще выпадает из ленты.
+  Всё считается в SQL на каждом запросе, крона нет. Клиент свои офферы всегда видит целиком.
+
+Безопасность (новые includes/)
+  - password.php: Argon2id (fallback bcrypt) + серверный PEPPER (HMAC-SHA256 до password_hash).
+    verify_and_upgrade_password() прозрачно переупаковывает старые голые bcrypt-хеши при успешном
+    входе, без принудительного сброса. auth.php register/login переведены на эти функции.
+  - rate_limit.php: скользящее окно по таблице rate_limit_hits (Redis на шаред-хостинге нет).
+    Бакеты в auth.php: register_ip 10/1ч, login_email 5/15м, login_ip 20/15м, verify_email 5/10м,
+    resend_code 3/10м. Чистка таблицы оппортунистическая (1 шанс из 50 при записи удаляет строки
+    старше суток), крона нет.
+  - db.php: display_errors=0 + log_errors=1 + кастомный set_error_handler, который логирует и
+    ГЛОТАЕТ warning/notice — иначе случайный PHP-warning печатается в тело ответа и ломает
+    res.json() на фронте (и светит пути). Плюс боевые креды тест-БД (см. «Деплой»).
+  - jwt.php: JWT_SECRET заменён с плейсхолдера на реальный 64-hex.
+  - project/api/.htaccess: аккуратнее пробрасывает Authorization (E=HTTP_AUTHORIZATION).
+  - project/uploads/.htaccess (новый): Options -Indexes + Require all denied на .php/.pl/.py/...
+    во всём uploads/ — defense-in-depth против upload→RCE.
+
+Админка расширена (admin.html/js)
+  В сайдбаре два новых раздела помимо «Все пользователи» / «Заявки на верификацию»: «Заявки на
+  вывод» и «Спорные контракты», у каждого бейдж-счётчик pending. Грузятся при входе в админку.
+
+Навбар: ссылки «Чат» (chats.html) и «Контракты» (contracts.html, изначально была подписана «В
+работе», переименована 2026-09-16) — только client/freelancer, для админа скрыты (common.js
+requireAuth()). Кэш-бастинг статики поднят до ?v=8.
+
+
+Полноценная вкладка контрактов — 2026-09-10 (позже в тот же день)
+
+  Раньше contracts.html был просто списком карточек, каждая вела в chat.html — весь функционал
+  контракта жил только в чате (chat.js renderExtraActions/renderContractBanner). Переделали в
+  самостоятельную страницу:
+  - Вверху nav-pills «Активные» (status proposed + active) / «Завершённые» (completed + failed +
+    rejected), у каждой вкладки бейдж-счётчик. Ниже — список карточек контрактов (contractCard()).
+  - Клик по карточке → модалка #contractModal: статус, вторая сторона, цена, срок, эскроу
+    (только для active), дата создания, ссылка на оффер (только клиенту), + контекстные блоки
+    (предложенное изменение условий с «Принять/Отклонить», статус холда/спора, кнопка «Оплатить
+    контракт» клиенту). В футере — «Открыть переписку» (chat.html?conversation_id=…).
+  - В шапке модалки СЛЕВА кнопка «⋮» (dropdown, #contract-actions-menu) — контекстные действия:
+    подтвердить/отклонить (freelancer, proposed), «Изменить условия (цена/срок)» → #changeModal,
+    «Закрыть: выполнен/не выполнен» (клиент всегда; фрилансер — только если его последнее
+    сообщение в переписке и ему ≥ 14 дней), «Оспорить закрытие» (freelancer, failed + активный
+    холд). Если действий нет (completed/rejected, proposed у клиента) — кнопка «⋮» скрыта.
+  - Бэкенд: contracts.php GET дополнен подзапросами last_message_sender_id / last_message_at
+    (по conversation), чтобы фронт мог показать доступность одностороннего закрытия фрилансером.
+    Больше НИЧЕГО в API не менялось — все действия (accept/reject/close, change propose/respond,
+    escrow deposit, dispute raise) уже существовали, contracts.js их переиспользует.
+  - Модалки #changeModal и #depositModal — копии из chat.html (Bootstrap не умеет вложенные
+    модалки, поэтому contracts.js прыгает между ними: openChild() прячет contractModal и по его
+    hidden.bs.modal показывает дочернюю; дочерняя по своему hidden возвращает contractModal).
+    submitChange()/submitDeposit() — локальные аналоги функций из chat.js, после успеха зовут
+    refreshOpenContract() (перезапрос списка + перерисовка открытой модалки).
+  - Кэш-бастинг статики поднят ?v=8 → ?v=9 на всех 13 страницах.
+  - Дублирование логики контракта между chat.js и contracts.js осознанное; если разрастётся —
+    вынести в общий contracts-actions.js.
+
+
+Номер контракта + контракты как «окошки» в чате — 2026-09-10 (ещё позже в тот же день)
+
+  Проблема: в чате контракт был singleton (chat.js currentContract = самый новый), а между двумя
+  людьми контрактов за жизнь переписки может быть много. Реальный баг: после failed-контракта #1
+  (с холдом, оспоримым 7 дней) клиент предлагает #2 — и фрилансер терял доступ к «Оспорить» для #1,
+  потому что баннер показывал только #2.
+
+  Номер контракта (6 цифр). includes/contract_number.php — contract_number(int $id): string.
+  Детерминированный скрэмблинг id (Кнут: (id * 2654435761) % 900000 + 100000), НЕ хранимая колонка,
+  без миграции. Множитель взаимно прост с 900000 → биекция, коллизий нет. Отдаётся как поле
+  `number` в contracts.php GET и подставляется во ВСЕ человекочитаемые строки (описания
+  wallet_transactions, тексты уведомлений) в contracts.php / escrow.php / disputes.php /
+  contract_change_requests.php / admin.php (+ admin.js disputeCard). Старые записи в БД остаются
+  со старым «#<id>» — это только историческая косметика.
+
+  Общий модуль frontend/js/contract-actions.js (грузится и chat.html, и contracts.html, ПЕРЕД
+  их page-скриптами). Владеет #contractModal + #changeModal + #depositModal. API:
+    ContractModal.init({ me, getContract, reload, showChatLink })  — вызвать раз на DOMContentLoaded
+    openContractModal(id)  — глобалка, вешается на onclick карточек
+  Хост держит свой массив контрактов; getContract(id) достаёт объект из него, reload() —
+  перезапрос+перерисовка списка хоста. После любого действия модуль зовёт reload() и заново
+  читает контракт через getContract() → перерисовывает открытую модалку. Экшены-глобалки для
+  inline onclick: cmAccept/cmReject/cmClose/cmRespondChange/cmRaiseDispute/cmOpenChange/
+  cmSubmitChange/cmOpenDeposit/cmSubmitDeposit. Константы CONTRACT_STATUS_LABELS/CONTRACT_STATUS_BADGE
+  тоже отсюда. contracts.js похудел до списка+вкладок; вся модалочная логика ушла в модуль.
+
+  chat.js переписан: вместо currentContract — массив contracts (ВСЕ по переписке). #contract-banner
+  → #contract-cards: стопка компактных «окошек» (contractChatCard()), по одному на контракт,
+  новые сверху: «📄 Контракт #834721 [статус] · цена · срок», подсказка (proposed → «ждёт вашего
+  решения»; active+client с недоплатой → «требуется оплата»), кнопка «Открыть» → openContractModal.
+  Все действия — в модалке, привязаны к КОНКРЕТНОМУ контракту. Хедерный dropdown «Доп. функции»
+  убран → кнопка #propose-contract-btn (client, только если нет proposed/active — совпадает с
+  409-гардом). «Предложить другой контракт» для фрилансера = отклонить текущий → клиент предложит
+  новый (у фрилансера своего propose в API нет). loadContracts() крутится на setInterval 10с
+  (события контракта не приходят по message-каналу). chat.js больше НЕ трогает контракты из
+  appendMessage; freelancerCanClose теперь в модуле, по полям last_message_* из API.
+
+  Кэш-бастинг ?v=9 → ?v=10 на всех 13 страницах. Схема БД не менялась (номер — производный).
+
+
+Правки по фидбеку 2026-09-10 (вечер)
+
+  - Чат: контракты занимали слишком много места сверху. Перенёс #contract-cards из полосы над
+    сообщениями в правый сайдбар (chat.html теперь row g-4 → col-lg-8 чат + col-lg-4 карточка
+    «Контракты»). Кнопка «＋ Контракт» переехала из хедера чата в шапку этого сайдбара. Карточки
+    контракта стали mini: p-2, короткий бейдж статуса (MINI_STATUS в chat.js), без кнопки
+    «Открыть» — кликается вся карточка. Список скроллится сам (.chat-contracts-list max-height
+    60vh в chat.css). Пустое состояние — «Контрактов пока нет.».
+  - Офферы на дашборде: кликом открывалась деталь только по тайтлу (была ссылка .offer-title-link).
+    Теперь вся карточка role="button" onclick="offerCardClick(event, id)" — offerCardClick
+    открывает openOfferDetail, но пропускает клики, попавшие в реальный контрол
+    (event.target.closest('a, button')), чтобы «Подать заявку»/«Редактировать»/«Заявки (N)»
+    работали как раньше. Тайтл снова обычный <h6>. Класс .offer-title-link удалён.
+  - Оверфлоу текста в модалке деталей оффера (длинная строка без пробелов вылезала за диалог):
+    common.css — .modal-body { overflow-wrap: break-word } как общий предохранитель +
+    #offer-detail-description { overflow-wrap: anywhere }. Плюс .card[role="button"] — курсор и
+    hover-тень (общее для офферных и контрактных карточек).
+  - Кэш-бастинг ?v=10 → ?v=11 на всех 13 страницах.
+
+
+Смета + типы контрактов + пункт по материалам — 2026-09-10 (поздний вечер)
+
+  ⚠️ ТРЕБУЕТ МИГРАЦИИ БД: project/sql/2026-09-10_staged_contracts_estimates.sql — прогнать один раз
+  в phpMyAdmin тест-сервера. Без неё contracts.php GET падает (нет колонок type/parent_contract_id).
+
+  СМЕТА (contract_estimates) — документ фрилансера с материалами, до контракта, привязан к
+  conversation. api/contract_estimates.php: GET ?conversation_id (участник) / POST submit (freelancer,
+  items[{name,qty,unit,unit_price}] + note, total считается на бэке, один 'submitted' за раз) /
+  POST respond (client, accept|reject). Уведомления estimate_submitted/accepted/rejected. UI —
+  карточка «Смета» в сайдбаре чата + #estimateModal (редактор строк у фрилансера / просмотр +
+  Утвердить/Отклонить у клиента). Утверждённая смета передаётся в contracts.php propose как
+  estimate_id (хранится в contracts.estimate_id, чисто справочно). Только в чате, не на contracts.html.
+
+  Два типа контракта. contracts.type ENUM('full','staged'). Этап = обычная строка contracts с
+  parent_contract_id (self-FK, ON DELETE CASCADE) + seq + title — переиспользует ВЕСЬ жизненный цикл
+  (accept/reject/close/escrow/dispute/change) без нового кода.
+    - propose type=full: как раньше.
+    - propose type=staged: создаётся parent (status=proposed, price=0, свой offer_id/estimate_id) +
+      этап 1 (proposed). Фрилансер жмёт accept на ЭТАПЕ → каскад: parent → active (и бейдж оффера).
+      reject единственного этапа → parent → rejected.
+    - add_stage (новый action, client): следующий этап можно сформировать только когда предыдущий
+      completed/failed/rejected. seq = max+1, status=proposed.
+    - close на staged-parent (новый ветвь): каскад — proposed-этапы → rejected, active-этапы →
+      failure (возврат клиенту + 7-дневный холд через refund_with_hold()), parent → completed/failed.
+    - escrow.php и contract_change_requests.php: депозит и смена условий по staged-parent
+      заблокированы (409) — только по этапам.
+    - GET /contracts.php: WHERE parent_contract_id IS NULL (этапы не в списке), для staged-parent
+      подшивается c.stages[] + агрегаты c.price (сумма не-rejected этапов) и c.escrowed_amount.
+    pay_freelancer()/refund_with_hold() вынесены в хелперы contracts.php (шарятся close + каскад).
+
+  Пункт «кто покупает материалы» — contracts.materials_paid_by / у каждого этапа своя
+  ENUM('exchange_reserve','client','exchange_service'). ЗАГЛУШКА: только хранится и показывается
+  ярлыком (MATERIALS_LABELS/MATERIALS_SHORT в contract-actions.js), на деньги/эскроу НЕ влияет.
+  Выбирается в #proposeModal и #stageModal.
+
+  Фронт: contract-actions.js — модалка теперь знает про staged-parent (агрегат + список этапов
+  cmStagesSection + «＋ Сформировать этап» → #stageModal, cmSubmitStage) и про этап (заголовок
+  «Этап N · #num», «↑ открыть» к parent). getContract хостов ищет и во вложенных c.stages
+  (getContractById в chat.js и contracts.js). #proposeModal получил радио тип/материалы + поле
+  названия 1-го этапа (onProposeTypeChange переключает). #stageModal и #estimateModal —
+  продублированы в chat.html (+ #stageModal в contracts.html). contracts.js: бейдж «поэтапный · N эт.».
+
+  Кэш-бастинг ?v=11 → ?v=12 на всех 13 страницах.
+
+
+Тупик после закрытия этапа — 2026-09-15
+
+  Миграцию пользователь прогнал на test2.2ezweb.tech, всё завелось. Баг-репорт: «после закрытия
+  этапа не могу открыть новый». Функционал add_stage работал и до этого (client, последний этап
+  terminal → можно добавить) — проблема была чисто в UX: закрыв этап, попадаешь на карточку
+  ЭТОГО закрытого этапа, а на ней не было ни одной кнопки — чтобы увидеть «＋ Сформировать
+  следующий этап» надо было вручную нажать мелкую ссылку «↑ открыть» наверх к родителю
+  (cmStagesSection рисует кнопку только на карточке ПАРЕНТА).
+
+  Правка в contract-actions.js:
+  - cmRenderExtra: для completed/failed СТАДИИ (isStage) теперь всегда рисует
+    cmStageNextStepPanel(c) — но только если это ПОСЛЕДНИЙ этап родителя и сам родитель ещё active
+    (иначе у более раннего завершённого этапа уже есть преемник — панель не нужна).
+  - Панель показывает то, что реально доступно роли: client → «＋ Сформировать следующий этап»
+    и «Закрыть контракт: выполнен/не выполнен»; freelancer → те же кнопки закрытия, только если
+    freelancerCanClose(parent) (14 дней тишины клиента), иначе просто текст «ждите клиента».
+  - cmAddStageFromStage() / cmCloseParentFromStage(outcome) — обе сначала переключают _cmOpen
+    на родителя через openContractModal(parent_contract_id) (модалка уже открыта, это просто
+    перерисовка), потом дёргают cmOpenStage()/cmClose() как обычно — так contract_id в
+    add_stage/close всегда уходит родительский, а не id закрытого этапа.
+  - Заодно добавил на failed-этапе/контракте общий алерт «❌ закрыт как невыполненный» для ОБЕИХ
+    сторон — раньше такое сообщение видел только фрилансер (через _cmHold, который клиенту не
+    грузится), клиент при просмотре failed-контракта не видел вообще никакого текста.
+  - «Закрыть контракт» / «Закрыть этап» как отдельные действия уже существовали и работали
+    (⋮-меню на родителе / на этапе) — тут не баг, просто их тоже не было видно с карточки
+    закрытого этапа, теперь дублируются в новой панели для скорости.
+
+  Кэш-бастинг ?v=12 → ?v=13 на всех 13 страницах.
+
+
+Бейдж «Уже найден работник» — 2026-09-15
+
+  Механизм offers.outdated_at уже существовал (ставится в contracts.php::accept при активации
+  полного контракта ИЛИ первого этапа поэтапного — через $offerToBadge), просто назывался иначе
+  и жил только 24 часа. Поправил под формулировку задачи:
+  - offers.php: OUTDATED_GRACE_HOURS 24 → 48 (2 дня) — после этого оффер пропадает из ленты
+    фрилансера целиком (условие в SQL, без cron, считается на каждый GET).
+  - is_outdated теперь считается для ОБЕИХ ролей (раньше — только для фрилансерской ленты);
+    клиент тоже видит бейдж на своих карточках, хотя фильтрации по нему для клиента как не было,
+    так и нет — он продолжает видеть все свои офферы, включая закрытые контрактом.
+  - dashboard.js: бейдж переименован «Неактуален» → «Уже найден работник» и перенесён наверх
+    карточки (offerCardClient, offerCardFreelancer) отдельной строкой над «Опубликовано/Заявок»,
+    вместо того, как было — вперемешку с бейджами бюджета/срока внизу. Тот же текст в модалке деталей
+    оффера (offer-detail-badges).
+
+  Кэш-бастинг ?v=13 → ?v=14 на всех 13 страницах.
+
+
+Смета — после подписания контракта, не до — 2026-09-15
+
+  Изначально построил смету как pre-контрактный артефакт (свободно составляется в переписке,
+  утверждённая смета опционально прицеплялась к contracts.estimate_id при propose). Пользователь
+  поправил порядок: смета составляется ПОСЛЕ подписания контракта, не до.
+
+  - api/contract_estimates.php action=submit: теперь сначала ищет активный контракт/этап в этой
+    переписке (SELECT ... WHERE conversation_id=? AND status='active' ORDER BY (parent_contract_id
+    IS NULL) ASC — этап предпочтительнее родителя, если оба active), и без него — 409 «Смету можно
+    составить только после подписания контракта». После вставки сметы делает
+    UPDATE contracts SET estimate_id=? WHERE id=<найденный активный контракт> — так colonна
+    contracts.estimate_id наконец получила осмысленное значение («смета ПОД этот контракт»,
+    проставляется бэкендом, а не клиентом) вместо мёртвого поля, которое я сначала добавлял
+    как forward-reference при propose.
+  - api/contracts.php propose: убрал целиком приём/валидацию/запись estimate_id (клиент больше
+    его не передаёт — на момент propose никакой сметы физически ещё быть не может, раз она теперь
+    строго после подписания).
+  - frontend/js/chat.js: убрал acceptedEstimateId и его прокидывание в submitPropose(). Добавил
+    hasSignedContract() (contracts.some(c => c.status==='active') — для поэтапного контракта это
+    сам parent, статус которого становится active после принятия этапа 1). canComposeEstimate()
+    теперь требует hasSignedContract() в дополнение к роли freelancer и «нет сметы или последняя
+    отклонена». renderEstimatePanel() без подписанного контракта показывает «Смета составляется
+    после подписания контракта» и прячет кнопку «Составить» — независимо от роли. Просмотр уже
+    поданных смет (даже после того как контракт закрылся) остаётся доступен как есть — это
+    историческая запись, её не блокирую.
+  - Убрал мёртвый #propose-estimate-hint из chat.html (никогда не был подключен, а теперь и
+    подавно не нужен — смета к моменту propose просто не существует).
+
+  Кэш-бастинг ?v=14 → ?v=15 на всех 13 страницах. Схема БД не менялась.
+
+
+Оффер-пикер при предложении контракта + смета явно привязана к контракту — 2026-09-16
+
+  ⚠️ ТРЕБУЕТ МИГРАЦИИ БД: project/sql/2026-09-16_estimate_contract_link.sql (добавляет
+  contract_estimates.contract_id) — прогнать в phpMyAdmin перед деплоем этих правок.
+
+  1) Оффер-пикер в «Предложить контракт». Раньше offer_id прокидывался в контракт молча — только
+     если чат был открыт по ссылке из отклика на конкретный оффер (?offer_id= в URL), без какого-
+     либо выбора в самой форме. Теперь:
+     - #proposeModal получил <select id="propose-offer-select"> со списком ОТКРЫТЫХ офферов этого
+       клиента (status='open' И !is_outdated — офферы, под которые уже есть подписанный контракт
+       с кем-то другим, из списка исключены, даже если формально ещё не закрыты руками).
+     - Выбор оффера подтягивает его budget → propose-price и deadline → propose-deadline
+       (applyOfferToProposeForm) — пользователь может их потом поправить, это не залипает.
+     - Кнопка «＋ Контракт» больше не data-bs-toggle, теперь onclick="openProposeModal()" — эта
+       функция сбрасывает форму, дёргает /offers.php (chat.js: loadClientOffers(), только для
+       role client), рисует опции и, если чат открыт из контекста конкретного оффера
+       (contextOfferId) и тот всё ещё в списке открытых — предвыбирает его.
+     - submitPropose() теперь берёт offer_id из значения селекта, а не из contextOfferId напрямую.
+
+  2) Смета явно привязана к контракту, а не только к переписке. Раньше «текущий» контракт для
+     сметы каждый раз ВЫЧИСЛЯЛСЯ заново на submit (активный этап/контракт в переписке), а на
+     самой записи contract_estimates это нигде не сохранялось — только forward-указатель
+     contracts.estimate_id в одну сторону. Проблема: «уже висит одна смета на рассмотрении»
+     проверялась по conversation_id — просроченная неотвеченная смета на уже ЗАКРЫТОМ контракте
+     блокировала бы подачу новой сметы под СЛЕДУЮЩИЙ контракт в той же переписке.
+     - sql/2026-09-16_estimate_contract_link.sql: contract_estimates.contract_id INT NULL
+       (FK → contracts.id, ON DELETE CASCADE).
+     - api/contract_estimates.php submit: тот же поиск активного контракта/этапа (этап
+       предпочтительнее родителя), но теперь contract_id пишется прямо в саму запись сметы, и
+       проверка «есть необработанная смета» теперь WHERE contract_id = ? (не conversation_id).
+     - frontend/js/chat.js: добавил currentActiveContractId() (JS-зеркало того же предпочтения
+       backend'а: активный этап > родитель) и estimateForCurrentContract() — ищет в estimates[]
+       именно ту, что contract_id === текущий активный, а не просто estimates[0] (это был
+       отдельный баг, который я сам внёс и тут же поймал при доработке: без этого фильтра
+       принятая смета по СТАРОМУ закрытому контракту не давала фрилансеру составить новую под
+       свежеподписанный). canComposeEstimate()/openEstimateModal()/renderEstimatePanel() теперь
+       все идут через currentEstimate() = estimateForCurrentContract() пока контракт активен,
+       иначе — последняя в переписке (для просмотра истории). Панель и модалка сметы показывают
+       «контракт #NNNNNN» / «этап #NNNNNN» рядом с суммой (estimateContractRef(), резолвит через
+       уже загруженный contracts[] на клиенте, без похода на бэкенд).
+
+  Кэш-бастинг ?v=15 → ?v=16 на всех 13 страницах.
+
+
+Смета — часть карточки контракта/этапа + статус оплаты для фрилансера — 2026-09-16 (вечер)
+
+  Пользователь поправил прошлую версию: смета не должна быть отдельной панелью в чате,
+  «привязанной» к переписке — она должна быть ЧАСТЬЮ конкретного контракта (полный) или этапа
+  (поэтапный), т.е. видна и управляема прямо внутри карточки ЭТОГО контракта/этапа. Плюс отдельный
+  запрос: фрилансер должен явно видеть, оплатил ли клиент депозит (резерв) — чтобы понимать,
+  можно ли начинать работу.
+
+  1) СМЕТА переехала внутрь contract-actions.js (модуль карточки контракта, общий для chat.html
+     и contracts.html) — убрана как самостоятельная сущность «по переписке».
+     - api/contract_estimates.php переписан вокруг contract_id как единственного ключа:
+       GET ?contract_id=, submit {contract_id, items, note}, участник проверяется напрямую по
+       contracts.client_user_id/freelancer_user_id (contract_participant_or_404, без похода через
+       conversations). submit отклоняет попытку составить смету на САМ поэтапный контракт
+       (parent_contract_id IS NULL && type=staged) — только на конкретный этап или полный
+       контракт — и требует status='active' у этой конкретной записи. Больше никакого поиска
+       «активного контракта в переписке» — вызывающий уже открыл нужную карточку, id известен.
+       Уведомления теперь называют номер контракта/этапа (contract_number()).
+     - contract-actions.js: новое состояние _cmEstimates (история сметы ИМЕННО этого contract_id,
+       грузится в cmLoadDetails() вместе с change/hold, только для status !== 'proposed' и не для
+       staged-parent). cmEstimateSection(c) рисуется в cmRenderExtra() для active/completed/failed
+       под алертом статуса оплаты — статус, кнопки «Составить»/«Открыть смету»/«Утвердить»/
+       «Отклонить», всё завязано на _cmOpen, а не на какой-то «текущий контракт переписки».
+       cmOpenEstimate/cmSubmitEstimate/cmRespondEstimate + перенесённые без изменений
+       estimateRowHtml/addEstimateRow/recalcEstimate/estimateReadonlyHtml (были в chat.js).
+       #estimateModal добавлен в hop-list contractModalInit (наравне с change/deposit/stage) —
+       модалка сметы открывается тем же приёмом (contractModal прячется → estimateModal
+       показывается → при закрытии обратно).
+     - #estimateModal-разметка (была только в chat.html) продублирована в contracts.html — смету
+       теперь можно вести и через страницу «Контракты», не только из чата.
+     - chat.html: убрана отдельная карточка «Смета» из сайдбара (estimate-panel/estimate-btn) —
+       весь блок этого функционала выпилен и из chat.js (loadEstimates, currentActiveContractId,
+       estimateForCurrentContract, currentEstimate, canComposeEstimate, estimateContractRef,
+       renderEstimatePanel, submitEstimate, respondEstimate и т.д. — единственное, что осталось
+       в chat.js по теме сметы, это комментарий-указатель на contract-actions.js).
+
+  2) Статус оплаты (резерва) виден фрилансеру. Новые шаренные хелперы в contract-actions.js:
+     - paymentStatus(c) → null (не активен / staged-родитель / нет цены) | 'full' | 'partial' |
+       'none' — по c.escrowed_amount vs c.price, только для активных full-контрактов/этапов
+       (у поэтапного родителя своего эскроу нет, см. агрегаты у него самого выше по карточке).
+     - paymentBadgeHtml(c) → компактный бейдж «✅ оплачено» / «⚠️ частично оплачено» /
+       «❌ не оплачено» для карточек-строк списка.
+     - Внутри модалки контракта (cmRenderExtra, active-ветка) — заметный alert прямо над кнопкой
+       «Оплатить»: полностью/частично/не оплачено, фрилансеру отдельным предложением "не
+       рекомендуем начинать работу до оплаты" при 'none' и "уточните остаток" при 'partial'.
+     - chat.js contractChatHint(): фрилансер вместо пустоты теперь видит paymentBadgeHtml() на
+       мини-карточке контракта в сайдбаре (клиент по-прежнему видит «💳 к оплате: X» — это более
+       информативно для того, кто платит).
+     - contracts.js contractCard(): тот же paymentBadgeHtml() строкой под карточкой в списке
+       «Контракты» — видно обеим сторонам, не только фрилансеру, лишним не посчитал.
+
+  Кэш-бастинг ?v=16 → ?v=17 на всех 13 страницах. Схема БД не менялась.
+
+
+«Вызов администратора» — рычаг решения конфликтов — 2026-09-16 (поздний вечер)
+
+  ⚠️ ТРЕБУЕТ МИГРАЦИИ БД: project/sql/2026-09-16_admin_escalations.sql — прогнать один раз в
+  phpMyAdmin. Добавляет contracts.frozen_at + новую таблицу admin_escalations (17-я таблица).
+
+  Смысл: любая сторона активного контракта/этапа может позвать администрацию — та видит контракт,
+  всю переписку и смету и решает конфликт напрямую, в обход обычного «обе стороны согласны».
+
+  Рефакторинг перед фичей: pay_freelancer()/refund_with_hold() (были приватными функциями внутри
+  contracts.php) вынесены в includes/contract_payouts.php — теперь их же использует admin.php для
+  принудительного закрытия. HOLD_DAYS переименован в CONTRACT_HOLD_DAYS и живёт в этом инклюде.
+
+  1) Сторона зовёт администрацию — api/escalations.php (новый):
+     - POST action=raise {contract_id, reason}: только по АКТИВНОМУ контракту/этапу (не по
+       поэтапному родителю целиком — parent_contract_id IS NULL && type=staged отклоняется),
+       не более одного открытого обращения на контракт одновременно. notify_admins().
+     - GET ?contract_id=: последняя эскалация по контракту (любого статуса) — для отображения
+       статуса «отправлено» / «рассмотрено: …» у сторон.
+  2) contract-actions.js: кнопка «🛎 Позвать администратора» — обычная кнопка в теле карточки
+     активного контракта/этапа (НЕ в ⋮-меню, чтобы была на виду), через #escalateModal (текстовое
+     поле «в чём проблема», добавлен в hop-list contractModalInit наравне с change/deposit/stage/
+     estimate). cmEscalationSection(c) показывает: кнопку (если ничего не отправлено), «отправлено,
+     ожидайте» (status=open), или итог решения (status=resolved, ESCALATION_RESOLUTION_LABELS +
+     resolution_note). Плюс отдельно — бейдж «🧊 заморожен администрацией …» если contracts.frozen_at
+     задан, рисуется в начале блока независимо от статуса эскалации. Модалка продублирована в
+     chat.html и contracts.html (как change/deposit/stage/estimate).
+  3) Админка решает — api/admin.php (расширен):
+     - GET action=escalations — список открытых обращений (карточка: номер контракта/этапа,
+       стороны, обрезанная причина, кнопка «Рассмотреть»), бейдж-счётчик в сайдбаре как у споров.
+     - GET action=escalation_detail&id= — полный пакет для разбора: сама эскалация (+ кто
+       обратился), контракт целиком (+ клиент/фрилансер с email), ВСЯ переписка конверсации
+       (m.* + имя отправителя, без ограничения по правам участника — админ видит чужой диалог
+       напрямую через SQL, не через messages.php), последняя смета с позициями.
+     - POST action=resolve_escalation {id, resolution, new_price?, new_deadline?, note}` — 4 исхода:
+       • terms_changed — UPDATE contracts SET price/deadline напрямую, без согласия сторон;
+       • closed_success — pay_freelancer() + status=completed (как обычное закрытие «выполнен»);
+       • closed_failure — refund_with_hold() + status=failed («в резерв клиенту», тот же 7-дневный
+         холд, что и у обычного расторжения / у фрилансерского оспаривания);
+       • frozen — ЗАГЛУШКА по прямому указанию: contracts.frozen_at = NOW(), уведомление о «тикете
+         в поддержку и внутрибиржевом расследовании» — сам тикет/расследование не реализованы,
+         frozen_at НИГДЕ не блокирует другие действия (contracts.php/escrow.php/contract_estimates.php
+         не тронуты) — это чисто видимый маркер «идёт разбирательство», без принуждения.
+       Все 4 исхода требуют contract.status='active' на момент решения (иначе 409 — вдруг кто-то
+       успел закрыть его сам, пока обращение висело). Уведомление уходит ОБЕИМ сторонам с одним и
+       тем же текстом решения. terms_changed/closed_*/если раньше был frozen — сбрасывают
+       frozen_at = NULL заодно.
+     - admin.html: новый пункт сайдбара «🛎 Обращения к администрации» + секция списка +
+       #escalationDetailModal (contract summary / переписка в скролл-боксе / смета / три кнопки
+       решения + форма цена/срок для terms_changed + общий textarea-комментарий, видимый обеим
+       сторонам).
+
+  Кэш-бастинг ?v=17 → ?v=18 на всех 13 страницах.
+
+
+База данных — 15 таблиц (актуально на 2026-09-10, см. kotegg007_novabuild.sql)
+ПОСЛЕ МИГРАЦИИ 2026-09-10 — 16 таблиц: + contract_estimates; contracts += type / parent_contract_id /
+seq / title / materials_paid_by / estimate_id (этапы живут в этой же таблице).
+ПОСЛЕ МИГРАЦИИ 2026-09-16 — 17 таблиц: + admin_escalations; contracts += frozen_at.
+
+users                  — id, email (он же логин админа), password_hash (Argon2id+pepper),
+                         role ENUM(client|freelancer|admin), first_name, last_name, avatar_path,
+                         status ENUM(active|banned),
                          verification_status ENUM(none|pending|verified|rejected), verification_doc_path,
                          verified_at, email_verified_at, verification_code, verification_code_expires_at,
                          created_at, updated_at
 freelancer_profiles    — id, user_id FK, phone, website, specialization, about (до 3000 символов),
-                         connects_balance INT DEFAULT 10000
-client_profiles        — id, user_id FK, company_name (опционально), phone
-offers                 — id, client_id FK→client_profiles, title, description,
-                         budget DECIMAL, deadline DATE, status ENUM(open|in_progress|closed), created_at
+                         connects_balance INT DEFAULT 10000, balance DECIMAL(12,2) — вывод заработка
+client_profiles        — id, user_id FK, company_name (опционально), phone,
+                         balance DECIMAL(12,2) — возвраты по невыполненным контрактам
+offers                 — id, client_id FK→client_profiles, title, description, budget DECIMAL, deadline DATE,
+                         status ENUM(open|in_progress|closed),
+                         outdated_at DATETIME NULL (штампуется когда по офферу активируется контракт —
+                         грейс 24ч, потом оффер уходит из ленты), created_at
 bids                   — id, offer_id FK, freelancer_id FK→freelancer_profiles, cover_note,
-                         connects_spent INT DEFAULT 10, status ENUM(pending|accepted|rejected), created_at
-                         UNIQUE KEY (offer_id, freelancer_id)
+                         connects_spent INT DEFAULT 10, status ENUM(pending|accepted|rejected) — по факту
+                         всегда pending (выбор исполнителя идёт через чат→контракт, не через accept заявки),
+                         created_at; UNIQUE KEY (offer_id, freelancer_id)
+offer_attachments      — id, offer_id FK ON DELETE CASCADE, file_path, original_name, mime_type, size, created_at
 notifications          — id, user_id FK ON DELETE CASCADE, type, message, is_read, created_at
-offer_attachments      — id, offer_id FK ON DELETE CASCADE, file_path, original_name, mime_type,
-                         size, created_at
+conversations          — id, client_user_id FK, freelancer_user_id FK, created_at
+                         UNIQUE KEY (client_user_id, freelancer_user_id) — одна переписка на пару
+messages               — id, conversation_id FK, sender_id FK, body TEXT (≤5000), created_at, read_at DATETIME NULL
+contracts              — id, conversation_id FK, client_user_id FK, freelancer_user_id FK, offer_id FK NULL,
+                         price DECIMAL, deadline DATE NULL,
+                         status ENUM(proposed|active|completed|failed|rejected),
+                         escrowed_amount DECIMAL DEFAULT 0, created_at, updated_at
+contract_change_requests — id, contract_id FK, proposed_by FK, new_price DECIMAL NULL, new_deadline DATE NULL,
+                         status ENUM(pending|accepted|rejected), created_at, decided_at DATETIME NULL
+wallet_transactions    — id, user_id FK, type ENUM(deposit|withdrawal|contract_payment|contract_earning),
+                         amount DECIMAL, description, related_offer_id FK NULL, related_contract_id FK NULL, created_at
+withdrawal_requests    — id, user_id FK, amount DECIMAL, status ENUM(pending|approved|rejected),
+                         created_at, decided_at DATETIME NULL
+balance_holds          — id, user_id FK (клиент, получивший возврат), contract_id FK, amount DECIMAL,
+                         release_at DATETIME (NOW()+7 дней), disputed_at DATETIME NULL,
+                         resolution ENUM(pending|released_to_client|released_to_freelancer) DEFAULT pending,
+                         created_at — см. БАГ-ЗАМЕТКУ про resolution в разделе «Споры и холды»
+rate_limit_hits        — id, bucket, identifier, created_at; KEY (bucket, identifier, created_at)
 
 Что реализовано (ТАСК 1 + ТАСК 2 + ТАСК 3)
 
@@ -398,7 +989,8 @@ offer_attachments      — id, offer_id FK ON DELETE CASCADE, file_path, origina
 
 Регистрация: создаёт запись в users + пустой профиль в freelancer_profiles или client_profiles,
   требует подтверждения email кодом (см. раздел "Email-верификация" ниже) прежде чем выдать JWT
-Логин: проверка password_verify(), блокирует неподтверждённые email, возвращает JWT
+Логин: verify_and_upgrade_password() (Argon2id+pepper, апгрейд старых bcrypt), rate limiting,
+  блокирует неподтверждённые email и banned, возвращает JWT
 JWT без библиотек: base64url + HMAC-SHA256, TTL 7 дней
 require_auth() — middleware, читает Authorization: Bearer <token>
 offers.php: клиент видит свои офферы + счётчик заявок; фрилансер видит все открытые
@@ -426,11 +1018,18 @@ pages/dashboard.html — рабочий дашборд: клиент видит 
 Что НЕ сделано (следующие таски)
 
 
- Принятие/отклонение конкретной заявки клиентом (bids.status accepted|rejected сейчас не используется,
-   см. раздел "Ставки коннектами" выше — офферы.php/оффер.html показывают заявки, но выбрать
-   исполнителя пока нельзя)
- Чат между заказчиком и фрилансером
- Платежи / эскроу
+ Приёмка работ по этапам / вложения внутри контракта
+ Отзывы и рейтинг фрилансера после закрытия контракта
+ Реальный платёжный шлюз вместо заглушек card|gpay|liqpay
+ Автоматическая разморозка balance_holds по истечении release_at — сейчас деньги «висят» на
+   client_profiles.balance, а frozen_amount просто перестаёт их учитывать через 7 дней; отдельного
+   «разморозчика» нет, крона на хостинге нет
+ Рассинхрон balance_holds.resolution ENUM ↔ admin.php::resolve_dispute (см. раздел «Споры и холды»)
+
+ Ранее «не сделано», теперь ГОТОВО (заход 2026-09-10): чат (Pusher + polling), контракты, эскроу,
+   споры/холды, кошелёк и вывод средств, докупка коннектов, финансовый отчёт. Выбор исполнителя
+   через accept заявки так и не делали — вместо этого клиент пишет фрилансеру и предлагает контракт
+   в чате.
 
 
 Соглашения в коде

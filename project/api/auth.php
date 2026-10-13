@@ -8,6 +8,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/jwt.php';
+require_once __DIR__ . '/../includes/rate_limit.php';
+require_once __DIR__ . '/../includes/password.php';
 
 $body   = json_decode(file_get_contents('php://input'), true) ?? [];
 $action = $body['action'] ?? '';
@@ -39,13 +41,18 @@ function handle_register(array $d): void {
 
     $db = get_db();
 
+    // Cap account creation per IP — mass fake signups, not per-user brute force.
+    if (!rate_limit_check($db, 'register_ip', client_ip(), 10, 3600))
+        respond(429, ['error' => 'Слишком много регистраций с этого адреса. Попробуйте позже.']);
+    rate_limit_record($db, 'register_ip', client_ip());
+
     // Duplicate check
     $stmt = $db->prepare('SELECT id FROM users WHERE email = ?');
     $stmt->execute([$email]);
     if ($stmt->fetch()) respond(409, ['error' => 'Email already registered']);
 
     // Create user
-    $hash = password_hash($password, PASSWORD_BCRYPT);
+    $hash = hash_password($password);
     $stmt = $db->prepare('INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)');
     $stmt->execute([$email, $hash, $role]);
     $user_id = (int) $db->lastInsertId();
@@ -71,19 +78,31 @@ function handle_login(array $d): void {
     if (!$email || !$password)
         respond(422, ['error' => 'Email and password required']);
 
-    $db   = get_db();
+    $db = get_db();
+    $ip = client_ip();
+
+    // Per-account AND per-IP limits: the first stops someone hammering one
+    // victim's password, the second stops one IP spraying many accounts.
+    if (!rate_limit_check($db, 'login_email', $email, 5, 900) || !rate_limit_check($db, 'login_ip', $ip, 20, 900))
+        respond(429, ['error' => 'Слишком много попыток входа. Попробуйте через 15 минут.']);
+
     $stmt = $db->prepare('SELECT id, password_hash, role, status, email_verified_at FROM users WHERE email = ?');
     $stmt->execute([$email]);
     $user = $stmt->fetch();
 
-    if (!$user || !password_verify($password, $user['password_hash']))
+    if (!$user || !verify_and_upgrade_password($db, (int)$user['id'], $password, $user['password_hash'])) {
+        rate_limit_record($db, 'login_email', $email);
+        rate_limit_record($db, 'login_ip', $ip);
         respond(401, ['error' => 'Invalid email or password']);
+    }
 
     if ($user['status'] === 'banned')
         respond(403, ['error' => 'Account is banned']);
 
     if (!$user['email_verified_at'])
         respond(403, ['error' => 'Email не подтверждён', 'pending_verification' => true, 'email' => $email]);
+
+    rate_limit_clear($db, 'login_email', $email);
 
     $token = jwt_encode(['user_id' => (int)$user['id'], 'role' => $user['role']]);
     respond(200, ['token' => $token, 'role' => $user['role'], 'user_id' => (int)$user['id']]);
@@ -98,7 +117,13 @@ function handle_verify_email(array $d): void {
     if (!$email || !$code)
         respond(422, ['error' => 'Email и код обязательны']);
 
-    $db   = get_db();
+    $db = get_db();
+
+    // The code is only 6 digits (1M combos) over a 10-minute window — cap
+    // guesses per email so scripting the guess isn't viable.
+    if (!rate_limit_check($db, 'verify_email', $email, 5, 600))
+        respond(429, ['error' => 'Слишком много попыток. Запросите новый код.']);
+
     $stmt = $db->prepare('
         SELECT id, role, email_verified_at, verification_code, verification_code_expires_at
         FROM users WHERE email = ?
@@ -114,8 +139,10 @@ function handle_verify_email(array $d): void {
         respond(200, ['token' => $token, 'role' => $user['role'], 'user_id' => (int)$user['id']]);
     }
 
-    if (!hash_equals((string)$user['verification_code'], $code))
+    if (!hash_equals((string)$user['verification_code'], $code)) {
+        rate_limit_record($db, 'verify_email', $email);
         respond(401, ['error' => 'Неверный код']);
+    }
 
     if (!$user['verification_code_expires_at'] || strtotime($user['verification_code_expires_at']) < time())
         respond(410, ['error' => 'Код истёк, запросите новый']);
@@ -124,6 +151,8 @@ function handle_verify_email(array $d): void {
         UPDATE users SET email_verified_at = NOW(), verification_code = NULL, verification_code_expires_at = NULL
         WHERE id = ?
     ')->execute([$user['id']]);
+
+    rate_limit_clear($db, 'verify_email', $email);
 
     $token = jwt_encode(['user_id' => (int)$user['id'], 'role' => $user['role']]);
     respond(200, ['token' => $token, 'role' => $user['role'], 'user_id' => (int)$user['id']]);
@@ -135,7 +164,13 @@ function handle_resend_code(array $d): void {
     $email = trim($d['email'] ?? '');
     if (!$email) respond(422, ['error' => 'Email обязателен']);
 
-    $db   = get_db();
+    $db = get_db();
+
+    // Each resend is a real email sent through the hosting's mail queue —
+    // cap it so this can't be used to spam an inbox or burn the mail quota.
+    if (!rate_limit_check($db, 'resend_code', $email, 3, 600))
+        respond(429, ['error' => 'Слишком много запросов кода. Попробуйте через 10 минут.']);
+
     $stmt = $db->prepare('SELECT id, email_verified_at FROM users WHERE email = ?');
     $stmt->execute([$email]);
     $user = $stmt->fetch();
@@ -143,6 +178,7 @@ function handle_resend_code(array $d): void {
     if (!$user) respond(404, ['error' => 'Пользователь не найден']);
     if ($user['email_verified_at']) respond(400, ['error' => 'Email уже подтверждён']);
 
+    rate_limit_record($db, 'resend_code', $email);
     issue_verification_code($db, (int)$user['id'], $email);
     respond(200, ['sent' => true]);
 }
@@ -163,7 +199,7 @@ function issue_verification_code(PDO $db, int $user_id, string $email): void {
 function send_verification_email(string $email, string $code): void {
     $subject = 'Код подтверждения — NovaBuild';
     $message = "Ваш код подтверждения: $code\n\nКод действителен 10 минут.";
-    $headers = "From: no-reply@novabuild.loc\r\nContent-Type: text/plain; charset=utf-8";
+    $headers = "From: NovaBuild <no-reply@test2.2ezweb.tech>\r\nContent-Type: text/plain; charset=utf-8";
     mail($email, $subject, $message, $headers);
 }
 

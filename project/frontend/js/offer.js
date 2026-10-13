@@ -85,15 +85,16 @@ function bidCard(b, rank) {
     <div class="card offer-card mb-3 p-3">
       <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
         <div class="d-flex align-items-center gap-3">
-          <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-semibold" style="width:48px;height:48px;font-size:1rem;${avatarStyle}">${avatarUrlValue ? '' : esc(initials(name))}</div>
+          <a href="freelancer-profile.html?user_id=${b.freelancer_user_id}" class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-semibold text-decoration-none" style="width:48px;height:48px;font-size:1rem;${avatarStyle}">${avatarUrlValue ? '' : esc(initials(name))}</a>
           <div>
-            <div class="fw-semibold">${esc(name)}${verified}</div>
+            <div class="fw-semibold"><a href="freelancer-profile.html?user_id=${b.freelancer_user_id}" class="text-decoration-none text-reset">${esc(name)}</a>${verified}</div>
             <div class="text-muted small">${esc(b.specialization || 'Специализация не указана')}</div>
           </div>
         </div>
         <div class="text-end">
           ${rankBadge}
           <div class="text-muted small mt-1">Ставка: ${b.connects_spent} коннектов</div>
+          <button class="btn btn-sm btn-outline-primary mt-1" onclick="messageFreelancer(${b.freelancer_user_id})">✉ Написать</button>
         </div>
       </div>
       ${coverNoteHtml(b.cover_note, b.id)}
@@ -131,4 +132,13 @@ function toggleCoverNote(bidId) {
   preview.classList.toggle('d-none', !showingFull);
   full.classList.toggle('d-none', showingFull);
   toggle.textContent = showingFull ? 'Показать полностью' : 'Свернуть';
+}
+
+async function messageFreelancer(freelancerUserId) {
+  try {
+    const res = await apiPost('/conversations.php', { action: 'start', other_user_id: freelancerUserId });
+    location.href = `chat.html?conversation_id=${res.id}&offer_id=${offerId}`;
+  } catch (e) {
+    alert(e.message);
+  }
 }

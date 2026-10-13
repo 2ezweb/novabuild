@@ -36,6 +36,9 @@ function renderSidebarProfile() {
     document.getElementById('profile-completeness-pct').textContent = pct + '%';
     document.getElementById('profile-completeness-bar').style.width = pct + '%';
     document.getElementById('stat-connects').textContent = currentUser.connects_balance ?? '—';
+    document.getElementById('stat-balance').textContent = formatUAH(currentUser.balance);
+  } else {
+    document.getElementById('stat-balance-client').textContent = formatUAH(currentUser.balance);
   }
 }
 
@@ -64,14 +67,22 @@ async function loadClientDashboard() {
   }
 }
 
+// The whole card opens the detail modal; clicks that land on a real control
+// (link / button) are left to that control.
+function offerCardClick(event, offerId) {
+  if (event.target.closest('a, button')) return;
+  openOfferDetail(offerId);
+}
+
 function offerCardClient(o) {
   return `
-    <div class="card offer-card mb-3 p-3">
+    <div class="card offer-card mb-3 p-3" role="button" onclick="offerCardClick(event, ${o.id})">
+      ${o.is_outdated ? `<div class="mb-2"><span class="badge bg-warning text-dark">Уже найден работник</span></div>` : ''}
       <div class="d-flex justify-content-between text-muted small mb-2">
         <span>Опубликовано ${timeAgo(o.created_at)}</span>
         <span>Заявок: ${o.bid_count || 0}</span>
       </div>
-      <h6 class="fw-semibold mb-1"><a class="offer-title-link" onclick="openOfferDetail(${o.id})">${esc(o.title)}</a></h6>
+      <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
       <p class="text-muted small mb-2">${esc(truncateText(o.description, 150))}</p>
       <div class="d-flex justify-content-between align-items-end flex-wrap gap-2">
         <div class="d-flex gap-2 flex-wrap">
@@ -226,13 +237,14 @@ function offerCardFreelancer(o, alreadyBid) {
   const clientLabel = o.client_company_name ? esc(o.client_company_name) : 'Частное лицо';
   const clientBadge = o.client_verification_status === 'verified' ? '<span class="badge bg-success ms-1">✓</span>' : '';
   return `
-    <div class="card offer-card mb-3 p-3">
+    <div class="card offer-card mb-3 p-3" role="button" onclick="offerCardClick(event, ${o.id})">
+      ${o.is_outdated ? `<div class="mb-2"><span class="badge bg-warning text-dark">Уже найден работник</span></div>` : ''}
       <div class="d-flex justify-content-between text-muted small mb-2">
         <span>Опубликовано ${timeAgo(o.created_at)}</span>
         <span>Заявок: ${o.bid_count || 0}</span>
       </div>
       <div class="text-muted small mb-1">${clientLabel}${clientBadge}</div>
-      <h6 class="fw-semibold mb-1"><a class="offer-title-link" onclick="openOfferDetail(${o.id})">${esc(o.title)}</a></h6>
+      <h6 class="fw-semibold mb-1">${esc(o.title)}</h6>
       <p class="text-muted small mb-2">${esc(truncateText(o.description, 150))}</p>
       <div class="d-flex justify-content-between align-items-center">
         <div class="d-flex gap-2 flex-wrap">
@@ -279,6 +291,7 @@ async function openOfferDetail(offerId) {
   document.getElementById('offer-detail-description').textContent = o.description || '';
   document.getElementById('offer-detail-badges').innerHTML = `
     <span class="badge bg-secondary">${statusLabel(o.status)}</span>
+    ${o.is_outdated ? `<span class="badge bg-warning text-dark">Уже найден работник</span>` : ''}
     ${o.budget ? `<span class="badge bg-light text-dark border">₴ ${Number(o.budget).toLocaleString('uk-UA')}</span>` : ''}
     ${o.deadline ? `<span class="badge bg-light text-dark border">до ${o.deadline}</span>` : ''}
   `;

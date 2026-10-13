@@ -53,10 +53,12 @@ body { background: #f8f9fa; }
    even if a specific size class wasn't applied to it. */
 .modal-body img { max-width: 100%; }
 
-.offer-title-link {
-  cursor: pointer;
-  color: inherit;
-  text-decoration: none;
-}
-.offer-title-link:hover { text-decoration: underline; }
+/* Long unbroken strings (pasted URLs, "ТестТестТест…") must wrap inside a
+   dialog instead of pushing its width past the viewport. */
+.modal-body { overflow-wrap: break-word; }
+#offer-detail-description { overflow-wrap: anywhere; }
+
+/* Whole card acts as a button (offer feed, contract cards). */
+.card[role="button"] { cursor: pointer; transition: box-shadow .12s ease; }
+.card[role="button"]:hover { box-shadow: 0 0 0 2px rgba(13, 110, 253, .25); }
 

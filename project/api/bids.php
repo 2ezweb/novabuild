@@ -39,7 +39,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
         $stmt = $db->prepare('
             SELECT b.id, b.cover_note, b.status, b.connects_spent, b.created_at,
-                   u.first_name, u.last_name, u.avatar_path, u.verification_status,
+                   u.id AS freelancer_user_id, u.first_name, u.last_name, u.avatar_path, u.verification_status,
                    fp.specialization
             FROM bids b
             JOIN freelancer_profiles fp ON fp.id = b.freelancer_id

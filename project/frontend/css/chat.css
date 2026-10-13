@@ -1,0 +1,47 @@
+.chat-messages {
+  height: 55vh;
+  overflow-y: auto;
+  border: 1px solid #e1e0d9;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fcfcfb;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Contracts sidebar list — scrolls on its own instead of stretching the page. */
+.chat-contracts-list {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.chat-bubble {
+  max-width: 70%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  font-size: .9rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.chat-bubble.mine {
+  align-self: flex-end;
+  background: #0d6efd;
+  color: #fff;
+  border-bottom-right-radius: 2px;
+}
+
+.chat-bubble.theirs {
+  align-self: flex-start;
+  background: #eef0f2;
+  color: #212529;
+  border-bottom-left-radius: 2px;
+}
+
+.chat-bubble .chat-time {
+  display: block;
+  font-size: .7rem;
+  opacity: .7;
+  margin-top: 2px;
+}
