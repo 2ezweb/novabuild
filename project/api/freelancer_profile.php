@@ -8,6 +8,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'OPTIONS') exit;
 
 require_once __DIR__ . '/../includes/db.php';
 require_once __DIR__ . '/../includes/auth_middleware.php';
+require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/brigades.php';
 
 $me = require_auth();
 
@@ -74,5 +76,15 @@ $stmt = $db->prepare('
 ');
 $stmt->execute([$userId]);
 $freelancer['reviews'] = $stmt->fetchAll();
+
+// Бригада: the one he leads (a client can propose contracts to it) or belongs to.
+$own = brigade_by_owner($db, $userId);
+if ($own) {
+    $freelancer['brigade'] = brigade_public_summary($db, $own) + ['is_owner' => true];
+} elseif ($m = brigade_membership($db, $userId)) {
+    $freelancer['brigade'] = ['name' => $m['name'], 'is_owner' => false, 'role' => $m['my_role']];
+} else {
+    $freelancer['brigade'] = null;
+}
 
 echo json_encode($freelancer);

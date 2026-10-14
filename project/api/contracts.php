@@ -14,6 +14,7 @@ require_once __DIR__ . '/../includes/contract_payouts.php';
 require_once __DIR__ . '/../includes/dates.php';
 require_once __DIR__ . '/../includes/staged.php';
 require_once __DIR__ . '/../includes/estimate_document.php';
+require_once __DIR__ . '/../includes/brigades.php';
 
 const FREELANCER_CLOSE_SILENCE_DAYS = 14;
 
@@ -48,6 +49,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // unilateral-close gate on the contracts page (same rule as close()).
     $sql = "
         SELECT c.*, u.first_name AS other_first_name, u.last_name AS other_last_name, u.avatar_path AS other_avatar_path,
+               (SELECT b.name FROM brigades b WHERE b.id = c.brigade_id) AS brigade_name,
                (SELECT o.title FROM offers o WHERE o.id = c.offer_id) AS offer_title,
                (SELECT m.sender_id  FROM messages m WHERE m.conversation_id = c.conversation_id ORDER BY m.id DESC LIMIT 1) AS last_message_sender_id,
                (SELECT m.created_at FROM messages m WHERE m.conversation_id = c.conversation_id ORDER BY m.id DESC LIMIT 1) AS last_message_at
@@ -222,6 +224,19 @@ if ($action === 'propose') {
 
     $freelancerId = (int) $conv['freelancer_user_id'];
 
+    // Optionally to the BRIGADE this freelancer leads (includes/brigades.php):
+    // the бригадир stays the contract party, members see the order and get
+    // their share at payout (contract_allocations).
+    $brigade = null;
+    if (!empty($body['to_brigade'])) {
+        $brigade = brigade_by_owner($db, $freelancerId);
+        if (!$brigade) {
+            http_response_code(409);
+            echo json_encode(['error' => 'У цього фрилансера немає бригади']);
+            exit;
+        }
+    }
+
     if ($type === 'full') {
         $stmt = $db->prepare('
             INSERT INTO contracts (conversation_id, client_user_id, freelancer_user_id, offer_id, type, title, price, deadline, status)
@@ -250,7 +265,13 @@ if ($action === 'propose') {
         $db->commit();
     }
 
+    if ($brigade) {
+        $db->prepare('UPDATE contracts SET brigade_id = ? WHERE id = ? OR parent_contract_id = ?')
+           ->execute([$brigade['id'], $contractId, $contractId]);
+    }
+
     create_notification($db, $freelancerId, 'contract_proposed',
+        ($brigade ? 'Бригаді «' . $brigade['name'] . '»: ' : '') .
         ($type === 'staged'
             ? ($stageMode === 'planned' ? 'Вам запропонували поетапний контракт із планом (етапів: ' . count($plan) . ')' : 'Вам запропонували поетапний контракт')
             : 'Вам запропонували контракт')
@@ -317,6 +338,10 @@ if ($action === 'add_stage') {
         $parentId, $nextSeq, $title, $price, $deadline,
     ]);
     $stageId = (int) $db->lastInsertId();
+    if (!empty($parent['brigade_id'])) {
+        // A brigade contract's stages belong to the same brigade.
+        $db->prepare('UPDATE contracts SET brigade_id = ? WHERE id = ?')->execute([$parent['brigade_id'], $stageId]);
+    }
 
     create_notification($db, (int) $parent['freelancer_user_id'], 'contract_proposed',
         'Вам запропонували етап ' . $nextSeq . ' за контрактом #' . contract_number($parentId));
@@ -406,6 +431,16 @@ if ($action === 'accept' || $action === 'reject') {
     if ($offerToBadge) {
         $db->prepare('UPDATE offers SET outdated_at = NOW() WHERE id = ? AND outdated_at IS NULL')
            ->execute([$offerToBadge]);
+    }
+
+    // Brigade order signed → the whole brigade learns about it.
+    if ($action === 'accept' && !empty($contract['brigade_id'])) {
+        $b = brigade_by_id($db, (int) $contract['brigade_id']);
+        if ($b) {
+            notify_brigade_members($db, (int) $b['id'], 'brigade_order',
+                'Бригада «' . $b['name'] . '» отримала замовлення: ' . ($contract['parent_contract_id'] ? 'етап ' . $contract['seq'] . ' контракту #' . contract_number((int) $contract['parent_contract_id']) : 'контракт #' . contract_number((int) $contract['id']))
+                . ' — деталі в кабінеті, вкладка «Бригада»');
+        }
     }
 
     $label = $contract['parent_contract_id'] ? 'етап' : 'контракт';

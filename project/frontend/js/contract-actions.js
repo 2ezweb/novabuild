@@ -209,7 +209,11 @@ function cmRenderBody(c) {
   const nameRow = name
     ? `<dt class="col-5 fw-normal text-muted">Назва</dt><dd class="col-7 mb-2 fw-semibold">${esc(name)}</dd>`
     : '';
-  const typeRow = nameRow + `<dt class="col-5 fw-normal text-muted">Тип</dt>
+  const brigadeName = c.brigade_name || (cmParentOf(c) || {}).brigade_name;
+  const brigadeRow = c.brigade_id && brigadeName
+    ? `<dt class="col-5 fw-normal text-muted">Виконавець</dt><dd class="col-7 mb-2">👷 бригада «${esc(brigadeName)}»</dd>`
+    : '';
+  const typeRow = nameRow + brigadeRow + `<dt class="col-5 fw-normal text-muted">Тип</dt>
     <dd class="col-7 mb-2">${c.type === 'staged' ? 'поетапний' : 'повний'}</dd>`;
   const parentRow = c.parent_contract_id
     ? `<dt class="col-5 fw-normal text-muted">Контракт</dt>
@@ -259,6 +263,27 @@ function cmRenderBody(c) {
 
   html += cmRenderExtra(c);
   document.getElementById('contract-modal-body').innerHTML = html;
+  cmMountAllocation(c);
+}
+
+// «💰 Розподіл оплати в бригаді» — only the бригадир (the contract's freelancer)
+// of a brigade contract/stage sees it; brigade-allocation.js draws the editor.
+function cmAllocationVisible(c) {
+  return _cmCtx.me.role === 'freelancer' && c.brigade_id && !cmIsStagedParent(c)
+    && c.status !== 'rejected' && typeof BrigadeAllocation !== 'undefined';
+}
+
+function cmAllocationSection(c) {
+  if (!cmAllocationVisible(c)) return '';
+  return `<div class="mt-3 pt-3 border-top">
+    <div class="fw-semibold small mb-2">💰 Розподіл оплати в бригаді</div>
+    <div id="cm-allocation"></div>
+  </div>`;
+}
+
+function cmMountAllocation(c) {
+  const el = document.getElementById('cm-allocation');
+  if (el && cmAllocationVisible(c)) BrigadeAllocation.render(el, c.id);
 }
 
 function cmStagesSection(c) {
@@ -407,6 +432,8 @@ function cmRenderExtra(c) {
   if (c.status === 'active' || c.status === 'completed' || c.status === 'failed' || cmIsPlannedStageOfActivePlan(c)) {
     out += cmEstimateSection(c);
   }
+
+  out += cmAllocationSection(c);
 
   if (!isStage) out += cmReviewSection(c);
 

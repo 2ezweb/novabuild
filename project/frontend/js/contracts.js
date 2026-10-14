@@ -94,6 +94,7 @@ function contractCard(c) {
         </div>
       </div>
       ${name ? `<div class="small mt-1 text-truncate">${esc(name)}</div>` : ''}
+      ${c.brigade_name ? `<div class="small text-muted">👷 Бригада «${esc(c.brigade_name)}»</div>` : ''}
       ${escrowNote}
       ${payBadge ? `<div class="mt-1">${payBadge}</div>` : ''}
     </div>`;

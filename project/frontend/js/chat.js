@@ -54,6 +54,7 @@ window.addEventListener('DOMContentLoaded', async () => {
   const otherName = [otherUser.first_name, otherUser.last_name].filter(Boolean).join(' ') || 'Співрозмовник';
   renderAvatarEl(document.getElementById('chat-avatar'), otherName, otherUser.avatar_path);
   document.getElementById('chat-title').textContent = otherName;
+  loadOtherBrigade();
 
   await loadMessages();
   await loadContracts();
@@ -242,7 +243,8 @@ function contractChatCard(c) {
   const staged = c.type === 'staged';
   const name   = contractName(c);
   const title  = (staged ? `📄 Поетапний #${esc(c.number || c.id)}` : `📄 Контракт #${esc(c.number || c.id)}`)
-    + (name ? `<div class="text-truncate" title="${esc(name)}">${esc(name)}</div>` : '');
+    + (name ? `<div class="text-truncate" title="${esc(name)}">${esc(name)}</div>` : '')
+    + (c.brigade_name ? `<div class="text-truncate text-muted" style="font-size:.75rem">👷 бригада «${esc(c.brigade_name)}»</div>` : '');
   const sub = staged
     ? `${c.stage_mode === 'planned' ? 'план · ' : ''}${(c.stages || []).length} ет. · ${esc(formatUAH(c.price))}`
     : `${esc(formatUAH(c.price))}${c.deadline ? ' · до ' + esc(c.deadline) : ''}`;
@@ -301,6 +303,26 @@ function renderProposeButton() {
   btn.style.display = currentUser.role === 'client' ? '' : 'none';
 }
 
+// ─── BRIGADE of the freelancer in this chat (api/brigades.php of_user) ───────
+// If he leads a brigade, the client may address the contract to the whole
+// brigade (propose to_brigade) — the бригадир then splits the pay.
+let otherBrigade = null;
+
+async function loadOtherBrigade() {
+  if (currentUser.role !== 'client' || !otherUser) return;
+  try {
+    otherBrigade = (await apiFetch(`/brigades.php?action=of_user&user_id=${otherUser.other_user_id}`)).brigade;
+  } catch { otherBrigade = null; }
+  const wrap = document.getElementById('propose-brigade-wrap');
+  if (!otherBrigade) { wrap.style.display = 'none'; return; }
+  wrap.style.display = '';
+  document.getElementById('propose-brigade-label').textContent = `👷 Запропонувати бригаді «${otherBrigade.name}» (${otherBrigade.member_count} ос.)`;
+  const roles = otherBrigade.members.map(m => m.role ? `${m.name} — ${m.role}` : m.name);
+  document.getElementById('propose-brigade-info').textContent =
+    'Ваш співрозмовник — бригадир. Замовлення отримає вся бригада, а бригадир розподілить оплату між учасниками.'
+    + (roles.length ? ' Склад: ' + roles.join(', ') + '.' : '');
+}
+
 // ─── PROPOSE A CONTRACT (chat-only entry point) ─────────────────────────────
 let clientOpenOffers = [];   // this client's own OPEN offers, for the picker below
 
@@ -350,6 +372,7 @@ function onProposeOfferChange() {
 async function openProposeModal() {
   hideError('propose-error');
   document.getElementById('propose-title').value = '';
+  document.getElementById('propose-to-brigade').checked = false;
   proposeAutoTitle = '';
   document.getElementById('propose-price').value = '';
   document.getElementById('propose-deadline').value = '';
@@ -478,6 +501,7 @@ async function submitPropose() {
     deadline: deadline || null,
     offer_id: offerId,
     title: val('propose-title'),
+    to_brigade: otherBrigade ? document.getElementById('propose-to-brigade').checked : false,
   };
   if (type === 'staged') {
     payload.stage_mode = mode;

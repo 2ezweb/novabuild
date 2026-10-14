@@ -355,6 +355,8 @@ function setupCabinetTabs(me) {
   tabs.style.display = me.role === 'admin' ? 'none' : '';
   const connectsTab = document.getElementById('tab-connects-item');
   if (connectsTab) connectsTab.style.display = me.role === 'freelancer' ? '' : 'none';
+  const brigadeTab = document.getElementById('tab-brigade-item');
+  if (brigadeTab) brigadeTab.style.display = me.role === 'freelancer' ? '' : 'none';
 }
 
 // ─── DATE INPUT BOUNDS ────────────────────────────────────────────────────────

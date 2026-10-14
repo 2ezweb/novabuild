@@ -28,7 +28,12 @@ async function loadProfile() {
     document.getElementById('fp-about').textContent = f.about || 'Фрилансер поки не заповнив опис профілю.';
 
     document.getElementById('fp-rating').innerHTML =
-      `${ratingBadgeHtml(f.rating_avg, f.rating_count)} <span class="text-muted small">· виконано контрактів: ${Number(f.completed_contracts) || 0}</span>`;
+      `${ratingBadgeHtml(f.rating_avg, f.rating_count)} <span class="text-muted small">· виконано контрактів: ${Number(f.completed_contracts) || 0}</span>`
+      + (f.brigade
+        ? (f.brigade.is_owner
+            ? `<div class="small mt-1">👷 Бригадир бригади <b>«${esc(f.brigade.name)}»</b> (${f.brigade.member_count} ос.) — контракт можна запропонувати всій бригаді в чаті.</div>`
+            : `<div class="small mt-1 text-muted">👷 Учасник бригади «${esc(f.brigade.name)}»${f.brigade.role ? ` · ${esc(f.brigade.role)}` : ''}</div>`)
+        : '');
     document.getElementById('fp-reviews').innerHTML = (f.reviews || []).length
       ? f.reviews.map(r => `
           <div class="border rounded p-2 mb-2">
